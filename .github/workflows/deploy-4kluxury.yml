@@ -1,0 +1,56 @@
+name: Deploy 4KLuxury Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-4kluxury
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PAGES_PROJECT: 4kluxury
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+      - run: node --check public/_worker.js
+      - run: node --check public/js/spatial-engine.js
+
+      - name: Deploy to Cloudflare Pages
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/pages-project.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PAGES_PROJECT")"
+          if [ "$code" != "200" ]; then
+            curl --fail --silent --show-error \
+              -X POST \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "{\"name\":\"$PAGES_PROJECT\",\"production_branch\":\"main\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects" \
+              > /tmp/pages-create.json || true
+          fi
+          npx wrangler pages deploy public --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true
+          echo "Successfully deployed to: https://$PAGES_PROJECT.pages.dev"
