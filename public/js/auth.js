@@ -57,7 +57,7 @@ const Auth = {
     const adminRoute = window.location.pathname.replace(/\/+$/, '') === '/admin';
     document.body.classList.toggle('admin-login-route', adminRoute);
     const initialGate = document.getElementById('activationGate');
-    if (initialGate) {
+    if (initialGate && adminRoute) {
       initialGate.classList.remove('hidden');
       initialGate.style.removeProperty('display');
       initialGate.style.display = 'flex';
@@ -168,16 +168,19 @@ const Auth = {
       this.deviceApprovalTimer = null;
     }
 
-    document.body.classList.add('activation-locked');
-    const gate = document.getElementById('activationGate');
-    if (gate) {
-      gate.classList.remove('hidden', 'maintenance-active');
-      gate.style.removeProperty('display');
-      gate.style.display = 'flex';
+    const adminRoute = window.location.pathname.replace(/\/+$/, '') === '/admin';
+    if (adminRoute) {
+      document.body.classList.add('activation-locked');
+      const gate = document.getElementById('activationGate');
+      if (gate) {
+        gate.classList.remove('hidden', 'maintenance-active');
+        gate.style.removeProperty('display');
+        gate.style.display = 'flex';
+      }
     }
     document.getElementById('maintenanceNotice')?.classList.add('hidden');
     const appContainer = document.getElementById('appContainer');
-    if (appContainer) {
+    if (appContainer && adminRoute) {
       appContainer.classList.add('hidden');
       appContainer.style.setProperty('display', 'none', 'important');
     }

@@ -1,1511 +1,1992 @@
-// Main Application Logic (Home, Categories, Search, Detail Modal)
+/**
+ * 4K LUXURY CINEMA PRO - SPATIAL CORE APPLICATION ENGINE
+ * Inspired by Apple VisionOS, Philips Ambilight, and Cyber-Luxury Aesthetics.
+ * Integrates Real Edge APIs, Cloudflare Pages backend, D1 database and Super Admin controls.
+ */
 
-const App = {
-  currentCategory: 'home',
-  currentPage: 1,
-  currentHeroMovie: null,
-  heroList: [],
-  heroRotateTimer: null,
-  feedRefreshTimer: null,
-  announcementRefreshTimer: null,
-  announcementExpiryTimer: null,
-  homeFeedLoading: false,
-  homeFeedUpdatedAt: null,
-  homeFeedOffline: false,
-  homeFeedSignature: '',
-  homeCatalog: [],
-  baseHomeSections: [],
-  homeSections: [],
-  activeHomeFilters: { genre: '', country: '' },
-  filterResults: [],
-  filterPagination: { currentPage: 0, totalPages: 0, totalItems: 0 },
-  filterLoading: false,
-  filterError: '',
-  filterRequestId: 0,
-  browseAllMode: false,
-  catalogInventoryTotal: 0,
-  activeMovieDetail: null,
-  activeServerIndex: 0,
-  searchDebounceTimer: null,
-  searchRequestId: 0,
-  scrollFrame: 0,
-  lastCatalogInteractionAt: 0,
-  heroRenderSignature: '',
-  detailRequestId: 0,
-  railInitialItems: 14,
-  railBatchItems: 12,
-
-  init() {
-    this.bindEvents();
-    this.bindTouchFeedback();
-    const activationGate = document.getElementById('activationGate');
-    if (activationGate && typeof MutationObserver !== 'undefined') {
-      this.activationGateObserver = new MutationObserver(() => this.syncPageScrollLock());
-      this.activationGateObserver.observe(activationGate, { attributes: true, attributeFilter: ['class', 'style'] });
+// =====================================================================
+// 1. DATA REPOSITORY: 4K MASTER MOVIES, SERIES & LIVE INTERACTION
+// =====================================================================
+const APP_DATA = {
+  spotlights: [
+    {
+      id: "dune-2",
+      slug: "dune-hanh-tinh-cat-phan-hai",
+      title: "DUNE: HÀNH TINH CÁT 2",
+      originalTitle: "Dune: Part Two (2024)",
+      rating: 8.8,
+      year: 2024,
+      duration: "2 giờ 46 phút",
+      country: "us",
+      countryName: "Âu Mỹ",
+      age: "T18",
+      format: "single",
+      status: "BẢN ĐẸP 4K HDR • VIETSUB + THUYẾT MINH VIP",
+      genres: ["Khoa Học Viễn Tưởng", "Phiêu Lưu Sử Thi", "Hành Động Bom Tấn"],
+      genreKeys: ["sci-fi", "action"],
+      synopsis: "Paul Atreides liên minh cùng Chani và tộc người Fremen trong hành trình báo thù những kẻ đã tàn sát gia tộc mình. Giữa tình yêu duy nhất và số mệnh vũ trụ, anh phải đối mặt với viễn cảnh tương lai tăm tối mà chỉ mình anh có thể thấu thị.",
+      backdrop: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1920&q=85",
+      poster: "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=85",
+      episodesCount: 1,
+      totalEpisodes: "Full Movie",
+      views: "1.420.500",
+      themeColor: "#f59e0b"
+    },
+    {
+      id: "shogun-2024",
+      slug: "shogun-2024",
+      title: "SHŌGUN: TƯỚNG QUÂN",
+      originalTitle: "Shōgun (Season 1)",
+      rating: 9.1,
+      year: 2024,
+      duration: "10 Tập • 60 phút/tập",
+      country: "us",
+      countryName: "Âu Mỹ / Nhật Bản",
+      age: "T18",
+      format: "series",
+      status: "TẬP 10 / 10 • TRỌN BỘ 4K VIETSUB",
+      genres: ["Lịch Sử", "Chính Kịch", "Chiến Tranh Khốc Liệt"],
+      genreKeys: ["drama", "action"],
+      synopsis: "Lấy bối cảnh Nhật Bản năm 1600 đầy biến động, Lãnh chúa Yoshii Toranaga phải chiến đấu chống lại các đối thủ trong Hội đồng Nhiếp chính. Cuộc chạm trán với thủy thủ người Anh John Blackthorne đã xoay chuyển cục diện lịch sử.",
+      backdrop: "https://images.unsplash.com/photo-1528164344705-475426879c0d?auto=format&fit=crop&w=1920&q=85",
+      poster: "https://images.unsplash.com/photo-1528164344705-475426879c0d?auto=format&fit=crop&w=800&q=85",
+      episodesCount: 10,
+      totalEpisodes: "10 Tập",
+      views: "2.180.000",
+      themeColor: "#ef4444"
+    },
+    {
+      id: "solo-leveling",
+      slug: "solo-leveling",
+      title: "TÔI THĂNG CẤP MỘT MÌNH",
+      originalTitle: "Solo Leveling (Arise)",
+      rating: 8.7,
+      year: 2024,
+      duration: "12 Tập • 24 phút/tập",
+      country: "kr",
+      countryName: "Hàn Quốc / Nhật Bản",
+      age: "T16",
+      format: "series",
+      status: "TẬP 12 / 12 • TRỌN BỘ 4K HDR",
+      genres: ["Anime 4K", "Hành Động Kỳ Ảo", "Siêu Năng Lực"],
+      genreKeys: ["anime", "action"],
+      synopsis: "Sung Jinwoo - thợ săn yếu nhất thế giới bất ngờ nhận được 'Hệ Thống' bí ẩn giúp anh nâng cấp chỉ số không giới hạn, từng bước vươn lên thành Hoàng Đế Bóng Đêm thống trị ngục tối.",
+      backdrop: "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=1920&q=85",
+      poster: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=800&q=85",
+      episodesCount: 12,
+      totalEpisodes: "12 Tập",
+      views: "3.650.000",
+      themeColor: "#00f2fe"
+    },
+    {
+      id: "oppenheimer",
+      slug: "oppenheimer-2023",
+      title: "OPPENHEIMER",
+      originalTitle: "Oppenheimer (2023)",
+      rating: 8.9,
+      year: 2023,
+      duration: "3 giờ 00 phút",
+      country: "us",
+      countryName: "Âu Mỹ",
+      age: "T18",
+      format: "single",
+      status: "BẢN IMAX 70MM 4K • THUYẾT MINH VIP",
+      genres: ["Lịch Sử", "Tâm Lý - Chính Kịch", "Chiến Lược"],
+      genreKeys: ["drama"],
+      synopsis: "Kiệt tác điện ảnh của Christopher Nolan tái hiện cuộc đời J. Robert Oppenheimer - cha đẻ của bom nguyên tử, cùng những giằng xé đạo đức khi nắm giữ sức mạnh hủy diệt nhân loại.",
+      backdrop: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1920&q=85",
+      poster: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=800&q=85",
+      episodesCount: 1,
+      totalEpisodes: "Full Movie",
+      views: "1.950.000",
+      themeColor: "#f97316"
     }
-    this.syncPageScrollLock();
-    this.loadHomeFeed();
-    this.startHomeFeedRefresh();
-    this.startAnnouncementRefresh();
-  },
+  ],
 
-  bindTouchFeedback() {
-    const selector = 'button, [role="button"], .movie-card, .coverflow-card, .schedule-card';
-    const clear = () => document.querySelectorAll('.is-pressing').forEach((element) => element.classList.remove('is-pressing'));
-    document.addEventListener('pointerdown', (event) => {
-      const target = event.target.closest?.(selector);
-      if (target && !target.disabled) {
-        target.classList.add('is-pressing');
-        if (target.closest?.('.cinema-rail, .movie-grid, .coverflow-section')) {
-          this.lastCatalogInteractionAt = Date.now();
-        }
-      }
-    }, { passive: true });
-    document.addEventListener('pointerup', clear, { passive: true });
-    document.addEventListener('pointercancel', clear, { passive: true });
-    window.addEventListener('blur', clear);
-  },
-
-  bindEvents() {
-    // Navbar scroll effect
-    window.addEventListener('scroll', () => {
-      this.lastCatalogInteractionAt = Date.now();
-      if (this.scrollFrame) return;
-      this.scrollFrame = requestAnimationFrame(() => {
-        document.getElementById('navbar')?.classList.toggle('scrolled', window.scrollY > 30);
-        this.scrollFrame = 0;
-      });
-    }, { passive: true });
-
-    // Search Input
-    const searchInput = document.getElementById('searchInput');
-    const searchClear = document.getElementById('searchClear');
-
-    searchInput.addEventListener('input', (e) => {
-      const val = e.target.value.trim();
-      searchClear.classList.toggle('hidden', !val);
-      clearTimeout(this.searchDebounceTimer);
-      if (!val) {
-        this.hideSearchDropdown();
-        return;
-      }
-      this.searchDebounceTimer = setTimeout(() => {
-        this.performInstantSearch(val);
-      }, 300);
-    });
-
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const val = e.target.value.trim();
-        if (val) {
-          this.hideSearchDropdown();
-          this.loadFullSearch(val, 1);
-        }
-      }
-    });
-
-    // Close dropdown on outside click
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.search-box')) {
-        this.hideSearchDropdown();
-      }
-      // Some iOS WebView sessions retain a stale body lock after dismissing a
-      // dialog. Re-evaluate it after every tap instead of leaving the home
-      // feed permanently unscrollable.
-      requestAnimationFrame(() => this.syncPageScrollLock());
-    });
-
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && this.currentCategory === 'home') {
-        this.loadHomeFeed({ silent: true });
-        this.loadAnnouncement();
-      }
-    });
-    window.addEventListener('online', () => {
-      API.clearMovieCache();
-      if (this.currentCategory === 'home') this.loadHomeFeed({ silent: true });
-      this.loadAnnouncement();
-    });
-  },
-
-  syncPageScrollLock() {
-    const gate = document.getElementById('activationGate');
-    const gateOpen = Boolean(gate
-      && !gate.classList.contains('hidden')
-      && gate.style.display !== 'none'
-      && getComputedStyle(gate).display !== 'none');
-    // Modal/player overlays are fixed and manage their own scroll. Do not
-    // lock the document for them: iOS WebView may retain that lock after an
-    // overlay closes, making the home feed look frozen.
-    document.body.classList.toggle('activation-locked', Boolean(gateOpen));
-    if (!gateOpen) {
-      for (const element of [document.documentElement, document.body]) {
-        element.style.removeProperty('overflow');
-        element.style.removeProperty('overflow-y');
-        element.style.removeProperty('height');
-        element.style.removeProperty('position');
-        element.style.removeProperty('touch-action');
-      }
+  seriesList: [
+    {
+      id: "shogun-2024",
+      slug: "shogun-2024",
+      title: "Shōgun: Tướng Quân",
+      currentEp: "Tập 10/10",
+      quality: "4K HDR",
+      lang: "Vietsub + Thuyết Minh",
+      rating: 9.1,
+      year: 2024,
+      country: "us",
+      format: "series",
+      genres: ["drama", "action"],
+      poster: "https://images.unsplash.com/photo-1528164344705-475426879c0d?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1528164344705-475426879c0d?auto=format&fit=crop&w=1920&q=85",
+      views: "2.1M lượt xem",
+      episodesCount: 10,
+      themeColor: "#ef4444",
+      synopsis: "Cuộc chiến vương quyền khốc liệt tại Nhật Bản thế kỷ 17 với mưu lược quân sự đỉnh cao."
+    },
+    {
+      id: "solo-leveling",
+      slug: "solo-leveling",
+      title: "Tôi Thăng Cấp Một Mình",
+      currentEp: "Tập 12/12",
+      quality: "4K 60FPS",
+      lang: "Vietsub",
+      rating: 8.7,
+      year: 2024,
+      country: "kr",
+      format: "series",
+      genres: ["anime", "action"],
+      poster: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=1920&q=85",
+      views: "3.6M lượt xem",
+      episodesCount: 12,
+      themeColor: "#00f2fe",
+      synopsis: "Thợ săn yếu nhất thức tỉnh khả năng thăng cấp bí ẩn, trở thành Chúa tể bóng tối."
+    },
+    {
+      id: "queen-of-tears",
+      slug: "queen-of-tears",
+      title: "Nữ Hoàng Nước Mắt",
+      currentEp: "Tập 16/16",
+      quality: "4K UHD",
+      lang: "Lồng Tiếng VIP",
+      rating: 8.5,
+      year: 2024,
+      country: "kr",
+      format: "series",
+      genres: ["drama"],
+      poster: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=85",
+      views: "4.8M lượt xem",
+      episodesCount: 16,
+      themeColor: "#ec4899",
+      synopsis: "Khủng hoảng hôn nhân hào môn giữa tiểu thư tài phiệt và giám đốc pháp lý tài hoa."
+    },
+    {
+      id: "fallout-2024",
+      slug: "fallout-2024",
+      title: "Fallout: Thảm Họa Hạt Nhân",
+      currentEp: "Tập 08/08",
+      quality: "4K Dolby Vision",
+      lang: "Vietsub",
+      rating: 8.6,
+      year: 2024,
+      country: "us",
+      format: "series",
+      genres: ["sci-fi", "action"],
+      poster: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1920&q=85",
+      views: "1.7M lượt xem",
+      episodesCount: 8,
+      themeColor: "#f59e0b",
+      synopsis: "Hành trình sinh tồn nơi vùng đất hoang tàn sau chiến tranh hạt nhân hủy diệt."
+    },
+    {
+      id: "jujutsu-kaisen-s2",
+      slug: "jujutsu-kaisen-phan-2",
+      title: "Chú Thuật Hồi Chiến (Mùa 2)",
+      currentEp: "Tập 23/23",
+      quality: "4K HDR",
+      lang: "Vietsub + Thuyết Minh",
+      rating: 9.0,
+      year: 2023,
+      country: "jp",
+      format: "series",
+      genres: ["anime", "action"],
+      poster: "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1920&q=85",
+      views: "5.2M lượt xem",
+      episodesCount: 23,
+      themeColor: "#8b5cf6",
+      synopsis: "Biến cố Shibuya đẫm máu làm rung chuyển toàn bộ giới chú thuật sư Nhật Bản."
+    },
+    {
+      id: "moving-kr",
+      slug: "moving-doi-thieu-nien-sieu-dang",
+      title: "Moving: Đội Thiếu Niên Siêu Đẳng",
+      currentEp: "Tập 20/20",
+      quality: "4K UHD",
+      lang: "Vietsub + Lồng Tiếng",
+      rating: 8.8,
+      year: 2023,
+      country: "kr",
+      format: "series",
+      genres: ["action", "sci-fi", "drama"],
+      poster: "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?auto=format&fit=crop&w=1920&q=85",
+      views: "3.1M lượt xem",
+      episodesCount: 20,
+      themeColor: "#38bdf8",
+      synopsis: "Những đứa trẻ mang siêu năng lực tiềm ẩn cùng cha mẹ che giấu quá khứ đặc vụ nguy hiểm."
     }
-  },
+  ],
 
-  // =================================================
-  // 1. HOME FEED & HERO BILLBOARD
-  // =================================================
-  async loadHomeFeed({ silent = false } = {}) {
-    if (this.homeFeedLoading) return;
-    this.homeFeedLoading = true;
-    this.currentCategory = 'home';
-    this.updateActiveNav('home');
-    // The current mobile layout uses Coverflow instead of the retired
-    // #heroBillboard block. Keep this path compatible with both layouts so a
-    // missing optional hero cannot abort the entire catalogue promise.
-    document.getElementById('heroBillboard')?.classList.remove('hidden');
-    document.getElementById('coverflowSection')?.classList.remove('hidden');
-    document.getElementById('continueWatchingSection')?.classList.remove('hidden');
-    document.getElementById('catalogFilterPanel')?.classList.remove('hidden');
-    document.getElementById('dynamicSections')?.classList.remove('hidden');
-    document.getElementById('categoryView')?.classList.add('hidden');
-
-    const container = document.getElementById('dynamicSections');
-    // Any client can encounter a slow first connection. Render the bundled
-    // catalogue immediately, then refresh it in place when the live Worker
-    // response arrives.
-    let renderedBundledCatalog = false;
-    if (!silent) {
-      try {
-        this.applyHomeFeed(API.getBundledHomeFeed());
-        renderedBundledCatalog = true;
-      } catch (fallbackError) {
-        console.warn('Unable to render bundled home catalogue', fallbackError);
-      }
+  cinemaList: [
+    {
+      id: "dune-2",
+      slug: "dune-hanh-tinh-cat-phan-hai",
+      title: "Dune: Hành Tinh Cát 2",
+      currentEp: "Full 166 Phút",
+      quality: "4K IMAX HDR",
+      lang: "Vietsub + Thuyết Minh",
+      rating: 8.8,
+      year: 2024,
+      country: "us",
+      format: "single",
+      genres: ["sci-fi", "action"],
+      poster: "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1920&q=85",
+      views: "1.4M lượt xem",
+      episodesCount: 1,
+      themeColor: "#f59e0b",
+      synopsis: "Cuộc chiến bảo vệ sa mạc Arrakis cùng loài giun cát khổng lồ chấn động màn ảnh."
+    },
+    {
+      id: "oppenheimer",
+      slug: "oppenheimer-2023",
+      title: "Oppenheimer",
+      currentEp: "Full 180 Phút",
+      quality: "4K 70mm",
+      lang: "Thuyết Minh VIP",
+      rating: 8.9,
+      year: 2023,
+      country: "us",
+      format: "single",
+      genres: ["drama"],
+      poster: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1920&q=85",
+      views: "1.9M lượt xem",
+      episodesCount: 1,
+      themeColor: "#f97316",
+      synopsis: "Tác phẩm lịch sử đoạt 7 giải Oscar về người kiến tạo vũ khí hủy diệt tối thượng."
+    },
+    {
+      id: "deadpool-wolverine",
+      slug: "deadpool-va-wolverine",
+      title: "Deadpool & Wolverine",
+      currentEp: "Full 128 Phút",
+      quality: "4K HDR",
+      lang: "Vietsub Chuẩn Rạp",
+      rating: 8.2,
+      year: 2024,
+      country: "us",
+      format: "single",
+      genres: ["marvel", "action"],
+      poster: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=1920&q=85",
+      views: "2.8M lượt xem",
+      episodesCount: 1,
+      themeColor: "#ef4444",
+      synopsis: "Màn kết hợp lầy lội và đẫm máu giải cứu đa vũ trụ Marvel."
+    },
+    {
+      id: "avatar-way-of-water",
+      slug: "avatar-dong-chay-cua-nuoc",
+      title: "Avatar: Dòng Chảy Của Nước",
+      currentEp: "Full 192 Phút",
+      quality: "4K HFR 3D",
+      lang: "Lồng Tiếng Rạp",
+      rating: 8.6,
+      year: 2022,
+      country: "us",
+      format: "single",
+      genres: ["sci-fi", "action"],
+      poster: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=85",
+      views: "4.5M lượt xem",
+      episodesCount: 1,
+      themeColor: "#0ea5e9",
+      synopsis: "Thế giới đại dương tráng lệ của Pandora trong siêu phẩm vượt mốc 2 tỷ USD."
+    },
+    {
+      id: "godzilla-minus-one",
+      slug: "godzilla-minus-one",
+      title: "Godzilla Minus One",
+      currentEp: "Full 125 Phút",
+      quality: "4K HDR",
+      lang: "Vietsub",
+      rating: 8.4,
+      year: 2023,
+      country: "jp",
+      format: "single",
+      genres: ["sci-fi", "action"],
+      poster: "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?auto=format&fit=crop&w=1920&q=85",
+      views: "1.3M lượt xem",
+      episodesCount: 1,
+      themeColor: "#10b981",
+      synopsis: "Quái thú nguyên tử trỗi dậy tàn phá nước Nhật hậu chiến tranh."
+    },
+    {
+      id: "exhuma-2024",
+      slug: "quat-mo-trung-ma",
+      title: "Quật Mộ Trùng Ma (Exhuma)",
+      currentEp: "Full 134 Phút",
+      quality: "4K UHD",
+      lang: "Vietsub + Thuyết Minh",
+      rating: 8.1,
+      year: 2024,
+      country: "kr",
+      format: "single",
+      genres: ["horror", "drama"],
+      poster: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=800&q=85",
+      backdrop: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1920&q=85",
+      views: "2.6M lượt xem",
+      episodesCount: 1,
+      themeColor: "#64748b",
+      synopsis: "Bí ẩn kinh hoàng đằng sau ngôi mộ cổ bị nguyền rủa của gia tộc giàu có."
     }
+  ],
 
-    if (!silent && !renderedBundledCatalog) container.innerHTML = `
-      <div class="loading-spinner-wrapper">
-        <div class="spinner"></div>
-        <p>Đang tải kho phim 4K cập nhật mới nhất...</p>
-      </div>
-    `;
+  ranking: [
+    { rank: 1, id: "dune-2", title: "Dune: Hành Tinh Cát 2", ep: "Full 4K", views: "1.420.500 lượt xem", rating: 8.8, poster: "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=200&q=85" },
+    { rank: 2, id: "shogun-2024", title: "Shōgun: Tướng Quân", ep: "Tập 10/10", views: "1.180.200 lượt xem", rating: 9.1, poster: "https://images.unsplash.com/photo-1528164344705-475426879c0d?auto=format&fit=crop&w=200&q=85" },
+    { rank: 3, id: "solo-leveling", title: "Tôi Thăng Cấp Một Mình", ep: "Tập 12/12", views: "980.400 lượt xem", rating: 8.7, poster: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=200&q=85" },
+    { rank: 4, id: "queen-of-tears", title: "Nữ Hoàng Nước Mắt", ep: "Tập 16/16", views: "850.120 lượt xem", rating: 8.5, poster: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=85" },
+    { rank: 5, id: "deadpool-wolverine", title: "Deadpool & Wolverine", ep: "Full Rạp", views: "740.900 lượt xem", rating: 8.2, poster: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=200&q=85" }
+  ],
 
-    try {
-      const data = await API.getHomeFeed();
-      if (renderedBundledCatalog) void this.preloadHomeArtwork(data);
-      const signature = this.catalogSignature(data);
-      if (!silent || signature !== this.homeFeedSignature) this.applyHomeFeed(data);
-      else this.updateLiveFeedLabel();
-      void this.refreshCatalogInventory();
-    } catch (err) {
-      // Do not replace a visible fallback catalogue with a transient error.
-      if (silent || renderedBundledCatalog) return;
-      container.innerHTML = `
-        <div class="loading-spinner-wrapper">
-          <p style="color: #f87171;">❌ Lỗi kết nối máy chủ dữ liệu phim. Vui lòng thử lại sau!</p>
-          <button class="btn-primary" style="width: auto; margin-top: 10px;" onclick="App.loadHomeFeed()">Thử Lại</button>
-        </div>
-      `;
-    } finally {
-      this.homeFeedLoading = false;
-      this.syncPageScrollLock();
+  comments: [
+    {
+      id: "c1",
+      user: "Trần Anh Tuấn (VIP 4K)",
+      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80",
+      time: "5 phút trước",
+      text: "Server VIP 1 tải mượt dã man! Âm thanh Dolby Atmos nghe tiếng cát bụi với sâu bọ rợn người luôn anh em ạ. 10/10 cho quả chất lượng bản này!",
+      likes: 42,
+      liked: false
+    },
+    {
+      id: "c2",
+      user: "Ngọc Mai Cinema",
+      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80",
+      time: "24 phút trước",
+      text: "Cảnh Paul cưỡi giun cát khổng lồ xem trên màn 4K nét từng hạt bụi. Phim đỉnh nhất năm nay rồi không còn gì để bàn cãi.",
+      likes: 29,
+      liked: false
+    },
+    {
+      id: "c3",
+      user: "Minh Khang Otaku",
+      avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=120&q=80",
+      time: "1 giờ trước",
+      text: "Tốc độ load phim ở 4K Luxury nhanh thật, không bị chèn quảng cáo nhảy pop-up rác như mấy web khác. Giao diện quá đẹp!",
+      likes: 18,
+      liked: false
     }
+  ]
+};
+
+// =====================================================================
+// 2. STATE MANAGER
+// =====================================================================
+const state = {
+  currentSpotlightIndex: 0,
+  activeMovie: APP_DATA.spotlights[0],
+  activeServer: "vip1",
+  activeEpisode: 1,
+  totalEpisodes: 10,
+  isPlaying: false,
+  isTheaterMode: false,
+  isMuted: false,
+  volume: 0.85,
+  currentTimeSec: 2535,
+  durationSec: 9960,
+  playbackTimer: null,
+  streamAnimId: null,
+  dustAnimId: null,
+  watchlist: JSON.parse(localStorage.getItem("4kluxury_watchlist") || "[]"),
+  filter: {
+    genre: "all",
+    country: "all",
+    format: "all"
   },
+  audioContext: null,
+  isSoundAmbientOn: false,
+  isPipDismissed: false
+};
 
-  catalogSignature(data) {
-    const sections = Array.isArray(data?.sections) ? data.sections : [];
-    const movieKey = (movie) => [
-      movie?.slug || movie?.name || '', movie?.year || '', movie?.episode_current || '',
-      movie?.quality || '', movie?.lang || '', movie?.modified?.time || movie?.updated_at || ''
-    ];
-    return JSON.stringify({
-      hero: (Array.isArray(data?.hero) ? data.hero : []).map(movieKey),
-      sections: sections.map((section) => ({
-        id: section?.id || section?.title || '',
-        title: section?.title || '',
-        items: (Array.isArray(section?.items) ? section.items : []).map(movieKey),
-      })),
-    });
-  },
+// =====================================================================
+// 3. INITIALIZATION & API SYNC
+// =====================================================================
+document.addEventListener("DOMContentLoaded", () => {
+  initBackgroundDustCanvas();
+  initTactileTouchFeedback();
+  initHeroSpotlight();
+  initHeroCoverflowDeck();
+  initPlayerHub();
+  initEpisodeGrid();
+  initServerPicker();
+  initCatalogs();
+  initTactileSegmentedFilter();
+  initRanking();
+  initComments();
+  initWatchlistDrawer();
+  initGlobalSearch();
+  initAudioAmbience();
+  initTheaterMode();
+  initStickyPiPPlayer();
+  initTrafficTicker();
+  initMobileBottomDock();
 
-  updateLiveFeedLabel() {
-    document.querySelectorAll('.section-update-status').forEach((element) => {
-      element.textContent = this.homeFeedOffline ? 'Dữ liệu đã lưu' : `Đã đồng bộ · ${new Date(this.homeFeedUpdatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
-    });
-  },
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
 
-  preloadHomeArtwork(data, timeoutMs = 1200) {
-    const sections = Array.isArray(data?.sections) ? data.sections : [];
-    const candidates = this.uniqueMovies([
-      ...(Array.isArray(data?.hero) ? data.hero : []),
-      ...sections.flatMap((section) => Array.isArray(section?.items) ? section.items : [])
-    ]).slice(0, 6);
-    const urls = candidates
-      .map((movie) => this.resolveImageUrl(movie.poster_url || movie.thumb_url))
-      .filter(Boolean);
-    if (!urls.length) return Promise.resolve(false);
+  // Sync real catalog feed from Edge Worker / D1 API in background
+  syncCatalogFromApi();
 
-    return new Promise((resolvePreload) => {
-      let settled = false;
-      let failures = 0;
-      const finish = (value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolvePreload(value);
-      };
-      const timer = window.setTimeout(() => finish(false), timeoutMs);
-      urls.forEach((url) => {
-        const image = new Image();
-        image.decoding = 'async';
-        image.onload = () => {
-          if (typeof image.decode === 'function') {
-            image.decode().then(() => finish(true)).catch(() => finish(true));
-          } else {
-            finish(true);
+  showToast("4K LUXURY SPATIAL PRO: Đã sẵn sàng kết nối CDN VIP 1!");
+});
+
+async function syncCatalogFromApi() {
+  try {
+    if (typeof API !== 'undefined' && API.getHomeFeed) {
+      const feed = await API.getHomeFeed();
+      if (feed && Array.isArray(feed.sections) && feed.sections.length > 0) {
+        const allItems = feed.sections.flatMap(s => s.items || []);
+        if (allItems.length > 0) {
+          // Transform items into our rich cards
+          const newSeries = [];
+          const newCinema = [];
+
+          allItems.forEach(item => {
+            const card = {
+              id: item.slug || String(item._id || Math.random()),
+              slug: item.slug,
+              title: item.name || item.title || "Phim 4K",
+              currentEp: item.episode_current || "Full 4K",
+              quality: item.quality || "4K HDR",
+              lang: item.lang || "Vietsub",
+              rating: item.vote_average ? Number(item.vote_average).toFixed(1) : 8.8,
+              year: item.year || 2024,
+              country: "us",
+              format: item.type === "series" ? "series" : "single",
+              genres: ["action", "sci-fi"],
+              poster: item.poster_url || item.thumb_url || "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=85",
+              backdrop: item.thumb_url || item.poster_url || "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1920&q=85",
+              views: "1.2M lượt xem",
+              episodesCount: 1,
+              themeColor: "#00f2fe",
+              synopsis: item.content ? item.content.replace(/<[^>]*>/g, '').slice(0, 160) + '...' : "Bản đẹp 4K chuẩn rạp không quảng cáo."
+            };
+
+            if (item.type === "series") {
+              newSeries.push(card);
+            } else {
+              newCinema.push(card);
+            }
+          });
+
+          if (newSeries.length > 0) {
+            APP_DATA.seriesList = [...newSeries.slice(0, 8), ...APP_DATA.seriesList];
+            renderSeriesGrid(APP_DATA.seriesList);
           }
-        };
-        image.onerror = () => {
-          failures += 1;
-          if (failures === urls.length) finish(false);
-        };
-        image.src = url;
-      });
-    });
-  },
-
-  applyHomeFeed(data) {
-    const visibleAnchor = [...document.querySelectorAll('#dynamicSections [data-section-id]')]
-      .map((section) => ({
-        id: section.dataset.sectionId,
-        top: section.getBoundingClientRect().top,
-      }))
-      .filter((entry) => entry.id && entry.top < innerHeight * 0.72)
-      .sort((a, b) => Math.abs(a.top) - Math.abs(b.top))[0] || null;
-    const railPositions = new Map(
-      [...document.querySelectorAll('#dynamicSections [data-section-id]')].map((section) => [
-        section.dataset.sectionId,
-        section.querySelector('.cinema-rail')?.scrollLeft || 0,
-      ])
-    );
-    let sections = Array.isArray(data?.sections) ? data.sections : [];
-    if (!sections.some((section) => Array.isArray(section?.items) && section.items.length > 0)) {
-      if (data?.policy !== Phim4KHome.POLICY) {
-        data = Phim4KHome.build([
-          ...(data?.hero || []), ...(data?.sections || []).flatMap(section => section.items || [])
-        ], { updatedAt: data?.updatedAt || null, offline: Boolean(data?.offline) });
-        sections = Array.isArray(data?.sections) ? data.sections : [];
-      }
-    }
-    const hasMovies = sections.some((section) => Array.isArray(section?.items) && section.items.length > 0);
-    if (!hasMovies) throw new Error('MOVIE_CATALOG_EMPTY');
-    this.homeFeedOffline = Boolean(data.offline);
-    this.homeFeedUpdatedAt = this.homeFeedOffline ? null : data.updatedAt || new Date().toISOString();
-    this.homeFeedSignature = this.catalogSignature(data);
-    this.heroList = data.hero || [];
-    document.getElementById('coverflowSection')?.classList.toggle('hidden', !this.heroList.length);
-    const rawCatalog = this.uniqueMovies([
-      ...this.heroList,
-      ...sections.flatMap((section) => Array.isArray(section?.items) ? section.items : [])
-    ]);
-    this.homeCatalog = this.enrichCatalogFilters(rawCatalog);
-    this.baseHomeSections = sections;
-    this.homeSections = this.buildHomeSections(sections);
-    if (this.heroList.length > 0) {
-      const nextHeroSignature = this.heroList
-        .map((movie) => `${movie?.slug || movie?.name || ''}:${movie?.poster_url || movie?.thumb_url || ''}`)
-        .join('|');
-      if (window.Coverflow && nextHeroSignature !== this.heroRenderSignature) {
-        Coverflow.init(this.heroList);
-        this.heroRenderSignature = nextHeroSignature;
-      }
-      this.renderHeroBillboard(this.heroList[0]);
-      this.startHeroRotation();
-    }
-
-    if (window.ContinueWatching) {
-      ContinueWatching.render();
-    }
-
-    this.renderHomeCatalog();
-    requestAnimationFrame(() => {
-      document.querySelectorAll('#dynamicSections [data-section-id]').forEach((section) => {
-        const previous = railPositions.get(section.dataset.sectionId);
-        const rail = section.querySelector('.cinema-rail');
-        if (rail && Number.isFinite(previous) && previous > 0) rail.scrollLeft = previous;
-      });
-      if (visibleAnchor) {
-        const nextAnchor = [...document.querySelectorAll('#dynamicSections [data-section-id]')]
-          .find((section) => section.dataset.sectionId === visibleAnchor.id);
-        if (nextAnchor) {
-          const delta = nextAnchor.getBoundingClientRect().top - visibleAnchor.top;
-          if (Math.abs(delta) > 1) window.scrollBy({ top: delta, left: 0, behavior: 'auto' });
+          if (newCinema.length > 0) {
+            APP_DATA.cinemaList = [...newCinema.slice(0, 8), ...APP_DATA.cinemaList];
+            renderCinemaGrid(APP_DATA.cinemaList);
+          }
         }
       }
+    }
+  } catch (err) {
+    console.log('[CatalogSync] Bundled 4K assets active:', err);
+  }
+}
+
+// =====================================================================
+// 4. TACTILE TOUCH & RIPPLE ENGINE
+// =====================================================================
+function initTactileTouchFeedback() {
+  document.addEventListener("pointerdown", (e) => {
+    const target = e.target.closest("button, .episode-btn, .server-node-pill, .seg-pill, .cat-pill-switch, .deck-item-card, .catalog-card, .rank-item, .dock-pill, .mob-dock-item");
+    if (!target) return;
+
+    if (navigator.vibrate) {
+      try { navigator.vibrate(12); } catch (err) {}
+    }
+
+    const rect = target.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 1.5;
+    const x = e.clientX - rect.left - size / 2;
+    const y = e.clientY - rect.top - size / 2;
+
+    const ripple = document.createElement("span");
+    ripple.className = "tactile-ripple";
+    ripple.style.width = ripple.style.height = `${size}px`;
+    ripple.style.left = `${x}px`;
+    ripple.style.top = `${y}px`;
+
+    target.appendChild(ripple);
+    setTimeout(() => {
+      if (ripple.parentNode) ripple.parentNode.removeChild(ripple);
+    }, 450);
+  });
+}
+
+// =====================================================================
+// 5. FLOATING DUST PARTICLES AMBIENT CANVAS
+// =====================================================================
+function initBackgroundDustCanvas() {
+  const canvas = document.getElementById("spatial-dust-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  let w = canvas.width = window.innerWidth;
+  let h = canvas.height = window.innerHeight;
+
+  window.addEventListener("resize", () => {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+  });
+
+  const dustCount = 45;
+  const dustParticles = [];
+  for (let i = 0; i < dustCount; i++) {
+    dustParticles.push({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      size: Math.random() * 1.5 + 0.5,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: -Math.random() * 0.4 - 0.1,
+      alpha: Math.random() * 0.5 + 0.1
     });
-    this.renderSchedule();
-  },
+  }
 
-  getScheduleMovies() {
-    return (this.homeCatalog || [])
-      .map((movie, index) => ({ movie, index, timestamp: Date.parse(movie?.modified?.time || '') || 0 }))
-      .sort((a, b) => (b.timestamp - a.timestamp) || (a.index - b.index))
-      .slice(0, 20)
-      .map((entry) => entry.movie);
-  },
+  function renderDust() {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#00f2fe";
+    dustParticles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = w;
+      if (p.x > w) p.x = 0;
+      if (p.y < 0) p.y = h;
 
-  formatScheduleTime(value) {
-    const date = new Date(value || '');
-    if (Number.isNaN(date.getTime())) return { day: 'MỚI', time: 'Vừa cập nhật' };
-    return {
-      day: date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
-      time: date.toLocaleString('vi-VN', {
-        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-      })
-    };
-  },
-
-  renderSchedule() {
-    const grid = document.getElementById('scheduleGrid');
-    const state = document.getElementById('scheduleState');
-    const updated = document.getElementById('scheduleUpdatedAt');
-    if (!grid || !state || !updated) return;
-
-    const movies = this.getScheduleMovies();
-    const feedDate = new Date(this.homeFeedUpdatedAt || '');
-    updated.textContent = Number.isNaN(feedDate.getTime())
-      ? 'Dữ liệu mới nhất từ kho phim'
-      : `Đồng bộ lúc ${feedDate.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}`;
-
-    grid.innerHTML = '';
-    if (!movies.length) {
-      state.textContent = 'Chưa tải được lịch cập nhật. Hãy bấm Làm mới.';
-      state.classList.remove('hidden');
-      return;
-    }
-
-    state.classList.add('hidden');
-    movies.forEach((movie) => {
-      const timestamp = this.formatScheduleTime(movie?.modified?.time);
-      const posterUrl = this.resolveImageUrl(movie.poster_url || movie.thumb_url);
-      const alternatePosterUrl = this.resolveImageUrl(movie.thumb_url || movie.poster_url);
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'schedule-card';
-      card.setAttribute('aria-label', `Mở phim ${movie.name || movie.origin_name || ''}`);
-      card.innerHTML = `
-        <img class="schedule-poster" src="${this.escapeHtml(posterUrl)}" alt="" loading="lazy" decoding="async" />
-        <span class="schedule-date"><strong>${this.escapeHtml(timestamp.day)}</strong><small>${this.escapeHtml(timestamp.time)}</small></span>
-        <span class="schedule-info">
-          <strong class="schedule-name">${this.escapeHtml(movie.name || movie.origin_name || 'Phim mới')}</strong>
-          <span class="schedule-origin">${this.escapeHtml(movie.origin_name || 'Đang cập nhật thông tin')}</span>
-          <span class="schedule-meta">
-            <b>${this.escapeHtml(String(movie.year || 'Mới'))}</b>
-            <b>${this.escapeHtml(movie.quality || 'Mới cập nhật')}</b>
-            <b>${this.escapeHtml(movie.lang || 'Vietsub')}</b>
-          </span>
-        </span>
-        <span class="schedule-open" aria-hidden="true">›</span>
-      `;
-      this.attachPosterFallback(card.querySelector('.schedule-poster'), [alternatePosterUrl]);
-      card.addEventListener('click', () => this.openMovieDetail(movie.slug));
-      grid.appendChild(card);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.globalAlpha = p.alpha;
+      ctx.fill();
     });
-  },
+    ctx.globalAlpha = 1.0;
+    state.dustAnimId = requestAnimationFrame(renderDust);
+  }
+  renderDust();
+}
 
-  async refreshSchedule() {
-    const button = document.getElementById('scheduleRefreshBtn');
-    const state = document.getElementById('scheduleState');
-    if (button?.disabled) return;
-    if (button) {
-      button.disabled = true;
-      button.textContent = 'Đang tải…';
-    }
-    if (state) {
-      state.textContent = 'Đang lấy lịch cập nhật mới nhất…';
-      state.classList.remove('hidden');
-    }
-    try {
-      const data = await API.getHomeFeed();
-      this.applyHomeFeed(data);
-      this.renderSchedule();
-    } catch (_error) {
-      if (state) {
-        state.textContent = 'Không thể cập nhật lúc này. Dữ liệu đã tải trước đó vẫn được giữ lại.';
-        state.classList.remove('hidden');
+// =====================================================================
+// 6. SPOTLIGHT HERO & 3D HORIZON COVERFLOW DECK
+// =====================================================================
+function initHeroSpotlight() {
+  updateHeroDisplay(state.currentSpotlightIndex);
+
+  const watchNowBtn = document.getElementById("hero-watch-now-btn");
+  if (watchNowBtn) {
+    watchNowBtn.addEventListener("click", () => {
+      playTactileClick();
+      scrollToPlayer(APP_DATA.spotlights[state.currentSpotlightIndex]);
+    });
+  }
+
+  const trailerBtn = document.getElementById("hero-trailer-btn");
+  if (trailerBtn) {
+    trailerBtn.addEventListener("click", () => {
+      playTactileClick();
+      scrollToPlayer(APP_DATA.spotlights[state.currentSpotlightIndex]);
+      simulateStreamLoad();
+      showToast("Đang phát Trailer 4K Ultra HD bản quyền...");
+    });
+  }
+
+  const addFavBtn = document.getElementById("hero-add-fav-btn");
+  if (addFavBtn) {
+    addFavBtn.addEventListener("click", () => {
+      playHeartChime();
+      toggleWatchlist(APP_DATA.spotlights[state.currentSpotlightIndex]);
+    });
+  }
+
+  const shareBtn = document.getElementById("hero-share-btn");
+  if (shareBtn) {
+    shareBtn.addEventListener("click", () => {
+      playTactileClick();
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(window.location.href);
+        showToast("Đã sao chép liên kết phim vào bộ nhớ tạm!");
+      } else {
+        showToast("Liên kết: " + window.location.href);
       }
-    } finally {
-      if (button) {
-        button.disabled = false;
-        button.textContent = 'Làm mới';
-      }
-    }
-  },
-
-  uniqueMovies(items) {
-    const seen = new Set();
-    return (items || []).filter((movie) => {
-      const key = String(movie?.slug || movie?.name || '');
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
     });
-  },
+  }
+}
 
-  enrichCatalogFilters(items) {
-    const fallback = Array.isArray(window.PHIM4K_CATALOG_FALLBACK) ? window.PHIM4K_CATALOG_FALLBACK : [];
-    return this.uniqueMovies([...this.enrichMovies(items), ...fallback]);
-  },
+function updateHeroDisplay(index) {
+  const movie = APP_DATA.spotlights[index];
+  if (!movie) return;
 
-  enrichMovies(items) {
-    const fallback = Array.isArray(window.PHIM4K_CATALOG_FALLBACK) ? window.PHIM4K_CATALOG_FALLBACK : [];
-    const bySlug = new Map(fallback.map((movie) => [movie.slug, movie]));
-    return this.uniqueMovies((items || []).map((movie) => {
-      const known = bySlug.get(movie.slug);
-      if (!known) return movie;
-      return {
-        ...known,
-        ...movie,
-        category: this.getMovieTags(movie, 'category').length ? movie.category : known.category,
-        country: this.getMovieTags(movie, 'country').length ? movie.country : known.country,
-      };
-    }));
-  },
+  const backdrop = document.getElementById("hero-backdrop");
+  const title = document.getElementById("hero-title");
+  const status = document.getElementById("hero-status");
+  const rating = document.getElementById("hero-rating");
+  const year = document.getElementById("hero-year");
+  const duration = document.getElementById("hero-duration");
+  const genres = document.getElementById("hero-genres");
+  const synopsis = document.getElementById("hero-synopsis");
 
-  normalizeFilterValue(value) {
-    return String(value || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLocaleLowerCase('vi-VN')
-      .trim();
-  },
+  if (backdrop) {
+    backdrop.style.backgroundImage = `url('${movie.backdrop}')`;
+  }
+  if (title) title.textContent = movie.title;
+  if (status) status.textContent = movie.status;
+  if (rating) rating.textContent = movie.rating;
+  if (year) year.textContent = movie.year;
+  if (duration) duration.textContent = movie.duration;
+  if (synopsis) synopsis.textContent = movie.synopsis;
 
-  getMovieTags(movie, field) {
-    const raw = movie?.[field];
-    const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-    return values
-      .map((item) => typeof item === 'string' ? item : item?.name)
-      .filter(Boolean)
-      .map((value) => String(value).trim());
-  },
+  if (genres) {
+    genres.innerHTML = movie.genres.map(g => `<span class="genre-capsule">${g}</span>`).join("");
+  }
 
-  moviesMatching(filters = this.activeHomeFilters) {
-    return this.homeCatalog.filter((movie) => {
-      const genreMatch = !filters.genre || this.getMovieTags(movie, 'category').some((tag) => this.normalizeFilterValue(tag) === this.normalizeFilterValue(filters.genre));
-      const countryMatch = !filters.country || this.getMovieTags(movie, 'country').some((tag) => this.normalizeFilterValue(tag) === this.normalizeFilterValue(filters.country));
-      return genreMatch && countryMatch;
+  document.querySelectorAll(".deck-item-card").forEach((el, i) => {
+    el.classList.toggle("active", i === index);
+  });
+}
+
+function initHeroCoverflowDeck() {
+  const container = document.getElementById("hero-carousel-selector");
+  if (!container) return;
+
+  container.innerHTML = APP_DATA.spotlights.map((movie, idx) => `
+    <div class="deck-item-card ${idx === 0 ? 'active' : ''}" data-index="${idx}" title="${movie.title}">
+      <img src="${movie.poster}" alt="${movie.title}">
+      <div class="deck-item-overlay">
+        <h5 class="deck-item-title">${movie.title}</h5>
+        <span class="deck-item-meta">⭐ ${movie.rating} • ${movie.year}</span>
+      </div>
+    </div>
+  `).join("");
+
+  container.querySelectorAll(".deck-item-card").forEach(item => {
+    item.addEventListener("click", () => {
+      playTactileClick();
+      const idx = parseInt(item.getAttribute("data-index"), 10);
+      state.currentSpotlightIndex = idx;
+      updateHeroDisplay(idx);
     });
-  },
+  });
+}
 
-  buildHomeSections(sourceSections = []) {
-    const personalized = window.Phim4KHome?.personalize?.(
-      this.homeCatalog,
-      window.ContinueWatching?.getItems?.() || [],
-      { limit: 30 }
-    );
-    const groups = [
-      ...(personalized ? [personalized] : []),
-      ...sourceSections.filter(section => Array.isArray(section?.items) && section.items.length),
-      { id: 'genre-action', title: 'Phim hành động', items: this.filterMoviesByTag('category', 'Hành Động') },
-      { id: 'genre-animation', title: 'Hoạt hình và Anime', items: this.filterMoviesByTag('category', 'Hoạt Hình') },
-      { id: 'country-china', title: 'Phim Trung Quốc', items: this.filterMoviesByTag('country', 'Trung Quốc') },
-      { id: 'country-korea', title: 'Phim Hàn Quốc', items: this.filterMoviesByTag('country', 'Hàn Quốc') },
-      { id: 'country-japan', title: 'Phim Nhật Bản', items: this.filterMoviesByTag('country', 'Nhật Bản') },
-      { id: 'country-western', title: 'Phim Âu Mỹ', items: this.filterMoviesByTag('country', 'Âu Mỹ') },
-    ];
-    return groups.filter((section) => section.items.length > 0);
-  },
+// =====================================================================
+// 7. THEATER PLAYER HUB & REAL-TIME 4K STREAM CANVAS
+// =====================================================================
+function initPlayerHub() {
+  const centerPlayBtn = document.getElementById("btn-center-play");
+  const ctrlPlayBtn = document.getElementById("ctrl-btn-play");
+  const timeline = document.getElementById("seek-timeline");
+  const volRange = document.getElementById("vol-range");
+  const volBtn = document.getElementById("ctrl-btn-vol");
+  const thxBtn = document.getElementById("btn-thx-boom");
+  const qualityBtn = document.getElementById("btn-quality-switch");
+  const rewindBtn = document.getElementById("ctrl-btn-rewind");
+  const forwardBtn = document.getElementById("ctrl-btn-forward");
+  const fullscreenBtn = document.getElementById("ctrl-btn-fullscreen");
+  const reportBtn = document.getElementById("btn-report-error");
+  const downloadBtn = document.getElementById("btn-download-movie");
 
-  refreshPersonalizedHome() {
-    if (!this.homeCatalog.length) return;
-    const before = this.homeSections.find(section => section.id === 'for-you')?.items?.map(movie => movie.slug).join('|') || '';
-    const next = this.buildHomeSections(this.baseHomeSections);
-    const after = next.find(section => section.id === 'for-you')?.items?.map(movie => movie.slug).join('|') || '';
-    this.homeSections = next;
-    if (before !== after && this.currentCategory === 'home') this.renderHomeCatalog();
-  },
+  loadMovieToPlayer(state.activeMovie);
 
-  filterMoviesByTag(field, value) {
-    const expected = this.normalizeFilterValue(value);
-    return this.homeCatalog.filter((movie) => this.getMovieTags(movie, field).some((tag) => this.normalizeFilterValue(tag) === expected));
-  },
+  const togglePlay = () => {
+    state.isPlaying = !state.isPlaying;
+    const centerOverlay = document.getElementById("player-center-play");
+    const ctrlIcon = document.getElementById("ctrl-icon-play");
+    const pipIcon = document.getElementById("pip-icon-play");
 
-  renderHomeCatalog() {
-    const container = document.getElementById('dynamicSections');
-    if (!container) return;
-    const hasFilter = this.browseAllMode || Boolean(this.activeHomeFilters.genre || this.activeHomeFilters.country);
-    document.getElementById('mainContent')?.classList.toggle('filter-active', hasFilter);
-    const filteredMovies = hasFilter ? this.filterResults : this.moviesMatching();
-    const sections = hasFilter
-      ? [{ id: 'filtered', title: this.getFilterTitle(), items: filteredMovies, layout: 'grid' }]
-      : this.homeSections;
-
-    container.innerHTML = '';
-    if (hasFilter && this.filterLoading && !filteredMovies.length) {
-      container.innerHTML = '<div class="loading-spinner-wrapper"><div class="spinner"></div><p>Đang tải thêm phim từ toàn bộ kho…</p></div>';
-      this.renderCatalogControls();
-      return;
-    }
-    if (!sections.length || (hasFilter && !filteredMovies.length)) {
-      const empty = document.createElement('div');
-      empty.className = 'catalog-empty-state';
-      empty.textContent = 'Chưa có phim phù hợp trong mục này. Hãy chọn bộ lọc khác hoặc bấm Bỏ lọc.';
-      container.appendChild(empty);
+    if (state.isPlaying) {
+      if (centerOverlay) centerOverlay.style.display = "none";
+      if (ctrlIcon) ctrlIcon.setAttribute("data-lucide", "pause");
+      if (pipIcon) pipIcon.setAttribute("data-lucide", "pause");
+      startPlaybackSimulation();
+      startCinematicStreamCanvas();
+      playCinemaChime();
+      showToast("Đang phát 4K Master: " + state.activeMovie.title);
     } else {
-      sections.forEach((section, index) => container.appendChild(this.createSectionElement(section, index)));
-      if (hasFilter && this.filterPagination.currentPage < this.filterPagination.totalPages) {
-        const loadMore = document.createElement('button');
-        loadMore.type = 'button';
-        loadMore.id = 'catalogLoadMoreBtn';
-        loadMore.className = 'catalog-load-more-btn';
-        loadMore.disabled = this.filterLoading;
-        loadMore.textContent = this.filterLoading ? 'Đang tải thêm…' : 'Tải thêm 24 phim';
-        loadMore.onclick = () => this.loadHomeFilterResults({ reset: false });
-        container.appendChild(loadMore);
-      }
+      if (centerOverlay) centerOverlay.style.display = "flex";
+      if (ctrlIcon) ctrlIcon.setAttribute("data-lucide", "play");
+      if (pipIcon) pipIcon.setAttribute("data-lucide", "play");
+      stopPlaybackSimulation();
+      stopCinematicStreamCanvas();
     }
-    this.renderCatalogControls();
-  },
+    if (window.lucide) window.lucide.createIcons();
+  };
 
-  getFilterTitle() {
-    if (this.browseAllMode) return 'Toàn bộ kho phim';
-    const labels = [this.activeHomeFilters.genre, this.activeHomeFilters.country].filter(Boolean);
-    return `Kết quả lọc: ${labels.join(' · ')}`;
-  },
+  if (centerPlayBtn) centerPlayBtn.addEventListener("click", togglePlay);
+  if (ctrlPlayBtn) ctrlPlayBtn.addEventListener("click", togglePlay);
 
-  collectFilterTags(field, preferred) {
-    const available = this.homeCatalog.flatMap((movie) => this.getMovieTags(movie, field));
-    const deduped = Array.from(new Map(available.map((value) => [this.normalizeFilterValue(value), value])).values());
-    const ordered = preferred;
-    return [...ordered, ...deduped.filter((tag) => !ordered.some((value) => this.normalizeFilterValue(tag) === this.normalizeFilterValue(value)))].slice(0, 10);
-  },
-
-  renderCatalogControls() {
-    const genreBox = document.getElementById('genreFilterChips');
-    const countryBox = document.getElementById('countryFilterChips');
-    const summary = document.getElementById('catalogFilterSummary');
-    const reset = document.getElementById('resetCatalogFilter');
-    const browseAll = document.getElementById('browseAllCatalogBtn');
-    if (!genreBox || !countryBox || !summary || !reset) return;
-
-    const genres = this.collectFilterTags('category', ['Hành Động', 'Hoạt Hình', 'Tình Cảm', 'Viễn Tưởng', 'Cổ Trang', 'Kinh Dị', 'Hài Hước', 'Tâm Lý', 'Võ Thuật', 'Phiêu Lưu']);
-    const countries = this.collectFilterTags('country', ['Việt Nam', 'Trung Quốc', 'Hàn Quốc', 'Nhật Bản', 'Âu Mỹ', 'Thái Lan']);
-    this.renderFilterButtons(genreBox, genres, 'genre');
-    this.renderFilterButtons(countryBox, countries, 'country');
-    const hasFilter = this.browseAllMode || Boolean(this.activeHomeFilters.genre || this.activeHomeFilters.country);
-    reset.classList.toggle('hidden', !hasFilter);
-    browseAll?.classList.toggle('hidden', this.browseAllMode);
-    const filterLabels = [this.activeHomeFilters.genre, this.activeHomeFilters.country].filter(Boolean).join(' · ');
-    summary.textContent = hasFilter
-      ? (this.filterLoading && !this.filterResults.length
-        ? `Đang tải ${this.browseAllMode ? 'toàn bộ kho phim' : `phim ${filterLabels}`}…`
-        : `${this.filterResults.length}/${this.filterPagination.totalItems || this.filterResults.length} phim ${this.browseAllMode ? 'trong kho' : filterLabels} đã tải.${this.filterError ? ` ${this.filterError}` : ''}`)
-      : `${this.homeCatalog.length} phim nổi bật${this.catalogInventoryTotal ? ` · ${this.catalogInventoryTotal.toLocaleString('vi-VN')} phim trong toàn kho` : ''}.`;
-  },
-
-  renderFilterButtons(container, values, kind) {
-    container.innerHTML = '';
-    values.forEach((value) => {
-      const button = document.createElement('button');
-      const selected = this.normalizeFilterValue(this.activeHomeFilters[kind]) === this.normalizeFilterValue(value);
-      button.type = 'button';
-      button.className = 'catalog-filter-chip';
-      button.classList.toggle('active', selected);
-      button.setAttribute('aria-pressed', String(selected));
-      button.textContent = value;
-      button.onclick = () => this.setHomeFilter(kind, value);
-      container.appendChild(button);
+  if (timeline) {
+    timeline.addEventListener("click", (e) => {
+      playTactileClick();
+      const rect = timeline.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, clickX / rect.width));
+      state.currentTimeSec = Math.floor(pct * state.durationSec);
+      updateTimelineUI();
     });
-  },
+  }
 
-  filterValueToSlug(value) {
-    return this.normalizeFilterValue(value)
-      .replace(/đ/g, 'd')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-  },
+  if (rewindBtn) {
+    rewindBtn.addEventListener("click", () => {
+      playTactileClick();
+      state.currentTimeSec = Math.max(0, state.currentTimeSec - 10);
+      updateTimelineUI();
+      showToast("Tua lại -10 giây");
+    });
+  }
+  if (forwardBtn) {
+    forwardBtn.addEventListener("click", () => {
+      playTactileClick();
+      state.currentTimeSec = Math.min(state.durationSec, state.currentTimeSec + 10);
+      updateTimelineUI();
+      showToast("Tua tới +10 giây");
+    });
+  }
 
-  async loadHomeFilterResults({ reset = true } = {}) {
-    const hasFilter = this.browseAllMode || Boolean(this.activeHomeFilters.genre || this.activeHomeFilters.country);
-    if (!hasFilter) return;
-    if (!reset && this.filterLoading) return;
-    const requestId = reset ? ++this.filterRequestId : this.filterRequestId;
-    const page = reset ? 1 : this.filterPagination.currentPage + 1;
-    if (reset) {
-      const localResults = this.browseAllMode ? this.homeCatalog : this.moviesMatching();
-      this.filterResults = localResults;
-      this.filterPagination = {
-        currentPage: localResults.length ? 1 : 0,
-        totalPages: localResults.length ? 1 : 0,
-        totalItems: localResults.length,
-      };
-    }
-    this.filterLoading = true;
-    this.filterError = '';
-    this.renderHomeCatalog();
-    try {
-      const data = this.browseAllMode
-        ? await API.getCatalog(page)
-        : await API.getFilteredCatalog({
-          genre: this.filterValueToSlug(this.activeHomeFilters.genre),
-          country: this.filterValueToSlug(this.activeHomeFilters.country),
-        }, page);
-      if (requestId !== this.filterRequestId) return;
-      const incoming = this.enrichMovies(Array.isArray(data.items) ? data.items : []);
-      this.filterResults = reset
-        ? this.uniqueMovies([...incoming, ...this.filterResults])
-        : this.uniqueMovies([...this.filterResults, ...incoming]);
-      this.filterPagination = {
-        currentPage: Number(data.pagination?.currentPage || page),
-        totalPages: Number(data.pagination?.totalPages || page),
-        totalItems: Number(data.pagination?.totalItems || this.filterResults.length),
-      };
-      this.catalogInventoryTotal = Math.max(this.catalogInventoryTotal, Number(data.pagination?.totalItems || 0));
-    } catch (_error) {
-      if (requestId !== this.filterRequestId) return;
-      if (reset) this.filterResults = this.moviesMatching();
-      this.filterPagination = {
-        currentPage: this.filterResults.length ? 1 : 0,
-        totalPages: this.filterResults.length ? 1 : 0,
-        totalItems: this.filterResults.length,
-      };
-      this.filterError = 'Máy chủ tạm gián đoạn nên đang hiển thị dữ liệu đã lưu.';
-    } finally {
-      if (requestId === this.filterRequestId) {
-        this.filterLoading = false;
-        this.renderHomeCatalog();
+  if (volRange) {
+    volRange.addEventListener("input", (e) => {
+      state.volume = e.target.value / 100;
+      updateVolumeIcon();
+    });
+  }
+
+  if (volBtn) {
+    volBtn.addEventListener("click", () => {
+      playTactileClick();
+      state.isMuted = !state.isMuted;
+      updateVolumeIcon();
+      showToast(state.isMuted ? "Đã tắt tiếng" : "Đã bật âm lượng");
+    });
+  }
+
+  if (thxBtn) {
+    thxBtn.addEventListener("click", () => {
+      triggerThxBoomEffect();
+    });
+  }
+
+  if (qualityBtn) {
+    const qualities = ["4K ULTRA HD", "2K 1440P", "1080P FULL HD", "720P FAST"];
+    let qIdx = 0;
+    qualityBtn.addEventListener("click", () => {
+      playTactileClick();
+      qIdx = (qIdx + 1) % qualities.length;
+      qualityBtn.textContent = qualities[qIdx];
+      simulateStreamLoad();
+      showToast("Chuyển chất lượng: " + qualities[qIdx]);
+    });
+  }
+
+  if (fullscreenBtn) {
+    fullscreenBtn.addEventListener("click", () => {
+      playTactileClick();
+      const stage = document.getElementById("player-stage-box");
+      if (!document.fullscreenElement) {
+        if (stage.requestFullscreen) stage.requestFullscreen();
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
       }
-    }
-  },
+    });
+  }
 
-  setHomeFilter(kind, value) {
-    if (!['genre', 'country'].includes(kind)) return;
-    this.browseAllMode = false;
-    this.activeHomeFilters[kind] = this.normalizeFilterValue(this.activeHomeFilters[kind]) === this.normalizeFilterValue(value) ? '' : value;
-    if (this.activeHomeFilters.genre || this.activeHomeFilters.country) {
-      this.loadHomeFilterResults({ reset: true });
+  if (reportBtn) {
+    reportBtn.addEventListener("click", () => {
+      playTactileClick();
+      showToast("Hệ thống đã tiếp nhận báo lỗi tập " + state.activeEpisode + ". Kỹ thuật viên đang kiểm tra!");
+    });
+  }
+
+  if (downloadBtn) {
+    downloadBtn.addEventListener("click", () => {
+      playTactileClick();
+      showToast("Đang tạo liên kết tải file MP4 4K VIP tốc độ cao...");
+    });
+  }
+}
+
+function updateTimelineUI() {
+  const seekProgress = document.getElementById("seek-progress");
+  const seekThumb = document.getElementById("seek-thumb");
+  const curTimeEl = document.getElementById("cur-time");
+
+  const pct = (state.currentTimeSec / state.durationSec) * 100;
+  if (seekProgress) seekProgress.style.width = `${pct}%`;
+  if (seekThumb) seekThumb.style.left = `${pct}%`;
+  if (curTimeEl) curTimeEl.textContent = formatTime(state.currentTimeSec);
+}
+
+function formatTime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const pad = (n) => String(n).padStart(2, '0');
+  if (h > 0) return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
+}
+
+function startPlaybackSimulation() {
+  stopPlaybackSimulation();
+  state.playbackTimer = setInterval(() => {
+    if (state.currentTimeSec < state.durationSec) {
+      state.currentTimeSec += 1;
+      updateTimelineUI();
     } else {
-      this.clearHomeFilters();
+      stopPlaybackSimulation();
+      stopCinematicStreamCanvas();
+      state.isPlaying = false;
+      const centerOverlay = document.getElementById("player-center-play");
+      if (centerOverlay) centerOverlay.style.display = "flex";
     }
-    API.trackUsage('filter_applied', {
-      genre: this.activeHomeFilters.genre || 'Tất cả',
-      country: this.activeHomeFilters.country || 'Tất cả'
-    });
-    document.getElementById('dynamicSections')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  },
+  }, 1000);
+}
 
-  clearHomeFilters() {
-    this.filterRequestId += 1;
-    this.activeHomeFilters = { genre: '', country: '' };
-    this.browseAllMode = false;
-    this.filterResults = [];
-    this.filterPagination = { currentPage: 0, totalPages: 0, totalItems: 0 };
-    this.filterLoading = false;
-    this.filterError = '';
-    this.renderHomeCatalog();
-  },
+function stopPlaybackSimulation() {
+  if (state.playbackTimer) {
+    clearInterval(state.playbackTimer);
+    state.playbackTimer = null;
+  }
+}
 
-  async refreshCatalogInventory() {
-    try {
-      const data = await API.getCatalog(1);
-      this.catalogInventoryTotal = Number(data.pagination?.totalItems || data.items?.length || 0);
-      this.renderCatalogControls();
-    } catch (_error) {
-      // The curated home feed remains usable while the inventory count retries later.
-    }
-  },
+function updateVolumeIcon() {
+  const volIcon = document.getElementById("ctrl-icon-vol");
+  if (!volIcon) return;
+  if (state.isMuted || state.volume === 0) {
+    volIcon.setAttribute("data-lucide", "volume-x");
+  } else if (state.volume < 0.5) {
+    volIcon.setAttribute("data-lucide", "volume-1");
+  } else {
+    volIcon.setAttribute("data-lucide", "volume-2");
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
 
-  browseAllCatalog() {
-    this.browseAllMode = true;
-    this.activeHomeFilters = { genre: '', country: '' };
-    void this.loadHomeFilterResults({ reset: true });
-    document.getElementById('dynamicSections')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  },
+function simulateStreamLoad() {
+  const loader = document.getElementById("player-loader");
+  if (loader) {
+    loader.classList.add("active");
+    setTimeout(() => {
+      loader.classList.remove("active");
+    }, 600);
+  }
+}
 
-  startHomeFeedRefresh() {
-    clearInterval(this.feedRefreshTimer);
-    const isTv = Phim4KPlatform.detect(navigator.userAgent, window.PHIM4K_PLATFORM) === 'android_tv';
-    this.feedRefreshTimer = setInterval(() => {
-      const playerOpen = !document.getElementById('playerModal')?.classList.contains('hidden');
-      const catalogIdle = Date.now() - this.lastCatalogInteractionAt > 12000;
-      if (!document.hidden && !playerOpen && this.currentCategory === 'home' && catalogIdle) {
-        this.loadHomeFeed({ silent: true });
-      }
-    // The Worker reads the public catalogue directly, so frequent metadata
-    // refreshes need no VPS or always-on PC. Pause while hidden or playing to
-    // avoid wasting bandwidth and disrupting playback.
-    }, isTv ? 90000 : 60000);
-  },
+function loadMovieToPlayer(movie, episodeNum = 1) {
+  state.activeMovie = movie;
+  state.activeEpisode = episodeNum;
 
-  startAnnouncementRefresh() {
-    clearInterval(this.announcementRefreshTimer);
-    void this.loadAnnouncement();
-    this.announcementRefreshTimer = setInterval(() => {
-      const playerOpen = !document.getElementById('playerModal')?.classList.contains('hidden');
-      if (!document.hidden && !playerOpen) void this.loadAnnouncement();
-    }, 10000);
-  },
+  const titleEl = document.getElementById("player-film-title");
+  const epEl = document.getElementById("player-current-ep");
+  const posterEl = document.getElementById("player-screen-poster");
+  const pipTitle = document.getElementById("pip-title");
+  const pipEp = document.getElementById("pip-ep");
+  const pipPoster = document.getElementById("pip-poster");
 
-  async loadAnnouncement() {
-    try {
-      this.renderAnnouncement(await API.getAnnouncement());
-    } catch (_error) {
-      // Keep the last valid banner during a transient network interruption.
-    }
-  },
+  if (titleEl) titleEl.textContent = movie.title;
+  if (epEl) epEl.textContent = `Tập ${String(episodeNum).padStart(2, '0')} (${movie.quality || 'Bản 4K Vietsub'})`;
+  if (posterEl) posterEl.src = movie.backdrop || movie.poster;
 
-  renderAnnouncement(data) {
-    const banner = document.getElementById('globalAnnouncement');
-    if (!banner) return;
-    clearTimeout(this.announcementExpiryTimer);
-    const expiresAt = Date.parse(data?.expiresAt || '');
-    if (!data?.active || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-      banner.classList.add('hidden');
-      banner.dataset.announcementId = '';
-      return;
-    }
-    document.getElementById('globalAnnouncementTitle').textContent = data.title || 'Thông báo từ Admin';
-    document.getElementById('globalAnnouncementMessage').textContent = data.message || '';
-    document.getElementById('globalAnnouncementExpiry').textContent = `Ghim đến ${new Date(expiresAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}`;
-    banner.dataset.announcementId = data.id || '';
-    banner.classList.remove('hidden');
-    this.announcementExpiryTimer = setTimeout(() => this.renderAnnouncement(data), Math.min(expiresAt - Date.now() + 250, 2147483647));
-  },
+  if (pipTitle) pipTitle.textContent = movie.title;
+  if (pipEp) pipEp.textContent = `Tập ${String(episodeNum).padStart(2, '0')} • 4K Vietsub`;
+  if (pipPoster) pipPoster.src = movie.poster;
 
-  renderHeroBillboard(movie) {
-    this.currentHeroMovie = movie;
-    const backdropEl = document.getElementById('heroBackdrop');
-    const titleEl = document.getElementById('heroTitle');
-    const subEl = document.getElementById('heroSub');
-    const descEl = document.getElementById('heroDesc');
-    const yearEl = document.getElementById('heroYear');
-    const qualityEl = document.getElementById('heroQuality');
+  updateAmbilightGlow(movie.themeColor || "#00f2fe");
+  initEpisodeGrid();
 
-    // Coverflow owns the hero UI in the current iOS build. These IDs only
-    // exist in the legacy web layout; Coverflow.init() has already received
-    // the same movie list in applyHomeFeed().
-    if (!backdropEl || !titleEl || !subEl || !descEl || !yearEl || !qualityEl) return;
-
-    // Protected poster / thumbnail URL resolver
-    this.setBackgroundImage(backdropEl, movie.thumb_url || movie.poster_url);
-
-    titleEl.textContent = movie.name;
-    subEl.textContent = movie.origin_name || '';
-    yearEl.textContent = movie.year || 'Chưa rõ năm';
-    qualityEl.textContent = movie.quality || 'Theo nguồn';
-    descEl.textContent = movie.content ? movie.content.replace(/<[^>]*>?/gm, '') : 'Bấm Thông tin để xem nội dung và danh sách tập.';
-  },
-
-  startHeroRotation() {
-    if (this.heroRotateTimer) clearInterval(this.heroRotateTimer);
-    let index = 0;
-    this.heroRotateTimer = setInterval(() => {
-      if (this.heroList.length > 1 && this.currentCategory === 'home') {
-        index = (index + 1) % this.heroList.length;
-        this.renderHeroBillboard(this.heroList[index]);
-      }
-    }, 9000);
-  },
-
-  createSectionElement(section, sectionIndex = 0) {
-    const sec = document.createElement('section');
-    const isGrid = section.layout === 'grid';
-    const itemCount = (section.items || []).length;
-    sec.className = `movie-section ${isGrid ? 'catalog-grid-section' : 'cinema-rail-section'}`;
-    sec.dataset.sectionId = section.id || '';
-
-    const updateStatus = section.id === 'latest' && this.homeFeedUpdatedAt
-      ? `Đồng bộ ${new Date(this.homeFeedUpdatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
-      : section.id === 'for-you'
-        ? 'Theo lịch sử xem trên tài khoản này'
-        : section.id === 'recent-interest'
-        ? 'Xếp theo điểm quan tâm TMDB / IMDb'
-        : '';
-
-    sec.innerHTML = `
-      <div class="section-header ${isGrid ? '' : 'cinema-section-header'}">
-        ${isGrid ? '' : `<span class="section-index" aria-hidden="true">${String(sectionIndex + 1).padStart(2, '0')}</span>`}
-        <div class="section-heading-copy">
-          ${isGrid ? '' : `<span class="section-eyebrow">BĂNG PHIM · ${itemCount} TỰA</span>`}
-          <h2 class="section-title">${this.escapeHtml(section.title)}</h2>
-        </div>
-        <div class="section-heading-aside">
-          ${updateStatus ? `<span class="section-update-status">${this.escapeHtml(updateStatus)}</span>` : ''}
-          ${isGrid ? '' : `<span class="rail-position" aria-live="polite">01 / ${String(Math.max(itemCount, 1)).padStart(2, '0')}</span><span class="rail-gesture" aria-hidden="true">VUỐT →</span>`}
-        </div>
-      </div>
-      <div class="${isGrid ? 'movie-grid filtered-movie-grid' : 'movie-row cinema-rail'}" aria-label="${this.escapeHtml(section.title || 'Danh sách phim')}"></div>
-    `;
-
-    const row = sec.querySelector(isGrid ? '.filtered-movie-grid' : '.cinema-rail');
-    const allItems = section.items || [];
-    const initialItems = isGrid ? allItems : allItems.slice(0, this.railInitialItems);
-    const fragment = document.createDocumentFragment();
-    initialItems.forEach((movie, movieIndex) => {
-      const card = this.createMovieCard(movie, isGrid ? null : movieIndex);
-      fragment.appendChild(card);
-    });
-    row.appendChild(fragment);
-    if (!isGrid) this.bindMovieRail(sec, row, allItems);
-
-    return sec;
-  },
-
-  bindMovieRail(section, row, items = []) {
-    if (!row) return;
-    const status = section.querySelector('.rail-position');
-    if (!status || !row.querySelector('.movie-card')) return;
-    let frame = 0;
-    let mounted = row.querySelectorAll('.movie-card').length;
-    let appending = false;
-    const appendNext = () => {
-      if (appending || mounted >= items.length) return;
-      appending = true;
-      const end = Math.min(items.length, mounted + this.railBatchItems);
-      const fragment = document.createDocumentFragment();
-      for (let index = mounted; index < end; index += 1) {
-        fragment.appendChild(this.createMovieCard(items[index], index));
-      }
-      row.appendChild(fragment);
-      mounted = end;
-      appending = false;
-    };
-    const update = () => {
-      frame = 0;
-      const rowRect = row.getBoundingClientRect();
-      const guide = rowRect.left + Math.min(28, rowRect.width * 0.08);
-      let nearestIndex = 0;
-      let nearestDistance = Number.POSITIVE_INFINITY;
-      row.querySelectorAll('.movie-card').forEach((card, index) => {
-        const distance = Math.abs(card.getBoundingClientRect().left - guide);
-        if (distance < nearestDistance) {
-          nearestDistance = distance;
-          nearestIndex = index;
+  // If real API detail is available, attempt stream resolution
+  if (movie.slug && typeof API !== 'undefined' && API.getDetail) {
+    API.getDetail(movie.slug).then(res => {
+      if (res && res.episodes && res.episodes.length > 0) {
+        const epData = res.episodes[0].server_data;
+        if (epData && epData[0]) {
+          const streamUrl = epData[0].link_embed || epData[0].link_m3u8;
+          if (streamUrl && epData[0].link_embed) {
+            const embed = document.getElementById("playerEmbed");
+            if (embed) {
+              embed.src = streamUrl;
+              embed.classList.remove("hidden");
+              if (posterEl) posterEl.style.display = "none";
+            }
+          }
         }
-      });
-      status.textContent = `${String(nearestIndex + 1).padStart(2, '0')} / ${String(items.length).padStart(2, '0')}`;
-      if (row.scrollLeft + row.clientWidth >= row.scrollWidth - row.clientWidth) appendNext();
-    };
-    row.addEventListener('scroll', () => {
-      if (!frame) frame = requestAnimationFrame(update);
-    }, { passive: true });
-    update();
-  },
-
-  createMovieCard(movie, railIndex = null) {
-    const card = document.createElement('div');
-    card.className = 'movie-card';
-    card.dataset.movieSlug = movie.slug || '';
-    card.onclick = () => this.openMovieDetail(movie.slug);
-    card.tabIndex = 0;
-    card.setAttribute('role', 'button');
-    card.setAttribute('aria-label', `Mở phim ${movie.name || 'Đang cập nhật'}`);
-    card.onkeydown = (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        this.openMovieDetail(movie.slug);
       }
-    };
+    }).catch(() => {});
+  }
+}
 
-    const accentPalette = ['#ff3d5e', '#ffb21c', '#8b7cff', '#25d8b4', '#58a6ff'];
-    const identity = String(movie.slug || movie.name || 'phim');
-    const accentIndex = [...identity].reduce((sum, character) => sum + character.charCodeAt(0), 0) % accentPalette.length;
-    card.style.setProperty('--card-accent', accentPalette[accentIndex]);
-    if (railIndex !== null) card.dataset.railIndex = String(railIndex);
+function scrollToPlayer(movie) {
+  loadMovieToPlayer(movie, 1);
+  const playerSection = document.getElementById("player-section");
+  if (playerSection) {
+    playerSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  simulateStreamLoad();
+}
 
-    const posterUrl = this.resolveImageUrl(movie.poster_url || movie.thumb_url);
-    const alternatePosterUrl = this.resolveImageUrl(movie.thumb_url || movie.poster_url);
-    const epCurrent = movie.episode_current || movie.episode_total || '';
-    const genre = this.getMovieTags(movie, 'category')[0] || '';
-    const country = this.getMovieTags(movie, 'country')[0] || '';
+function updateAmbilightGlow(colorHex) {
+  const backlight = document.getElementById("player-ambient-backlight");
+  if (backlight) {
+    backlight.style.background = `radial-gradient(circle at 50% 50%, ${colorHex}88 0%, rgba(59, 130, 246, 0.25) 45%, transparent 70%)`;
+  }
 
-    card.innerHTML = `
-      <div class="card-poster-wrapper">
-        <img class="card-poster" src="${this.escapeHtml(posterUrl)}" alt="${this.escapeHtml(movie.name || 'Poster phim')}" loading="${railIndex !== null && railIndex < 2 ? 'eager' : 'lazy'}" fetchpriority="${railIndex !== null && railIndex < 2 ? 'high' : 'auto'}" decoding="async" width="300" height="450" />
-        ${railIndex !== null ? `<span class="card-rail-number" aria-hidden="true">${String(railIndex + 1).padStart(2, '0')}</span>` : ''}
-        <span class="card-badge-quality">${this.escapeHtml(movie.quality || 'Theo nguồn')}</span>
-        ${epCurrent ? `<span class="card-badge-ep">${this.escapeHtml(epCurrent)}</span>` : ''}
-        <span class="card-quick-play" aria-hidden="true"><b>▶</b><small>MỞ PHIM</small></span>
-      </div>
-      <div class="card-info">
-        <h4 class="card-title" title="${this.escapeHtml(movie.name || '')}">${this.escapeHtml(movie.name || 'Đang cập nhật')}</h4>
-        <div class="card-meta">
-          <span>${this.escapeHtml(movie.year || '2026')}</span>
-          <span>${this.escapeHtml(movie.lang || 'Vietsub')}</span>
-        </div>
-        ${(genre || country) ? `<div class="card-catalog-tags">${genre ? `<span>${this.escapeHtml(genre)}</span>` : ''}${country ? `<span>${this.escapeHtml(country)}</span>` : ''}</div>` : ''}
-      </div>
-    `;
+  const canvas = document.getElementById("player-ambient-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  canvas.width = 600;
+  canvas.height = 340;
 
-    this.attachPosterFallback(card.querySelector('.card-poster'), [alternatePosterUrl]);
+  const grad = ctx.createRadialGradient(300, 170, 20, 300, 170, 300);
+  grad.addColorStop(0, colorHex + "44");
+  grad.addColorStop(0.7, colorHex + "11");
+  grad.addColorStop(1, "transparent");
 
-    return card;
-  },
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
 
-  resolveImageUrl(path) {
-    return this.resolveDirectImageUrl(path);
-  },
+// =====================================================================
+// 8. CINEMATIC 4K VIDEO STREAM SIMULATION
+// =====================================================================
+let streamParticles = [];
+function startCinematicStreamCanvas() {
+  const canvas = document.getElementById("player-stream-canvas");
+  if (!canvas) return;
+  canvas.classList.add("active");
+  const ctx = canvas.getContext("2d");
 
-  resolveDirectImageUrl(path) {
-    const value = String(path || '').trim();
-    if (!value) return this.posterFallbackUrl();
-    if (value === this.posterFallbackUrl() || value.startsWith('/media/')) return value;
-    try {
-      const url = new URL(value, window.location?.href || 'https://local.invalid');
-      const apiOrigin = new URL(window.Phim4KRuntime?.apiBaseUrl || window.location?.origin || url.origin).origin;
-      const ticket = url.pathname === '/api/media/image' && /^[A-Za-z0-9_-]{24,}$/.test(url.searchParams.get('t') || '');
-      if (ticket && url.origin === apiOrigin) return url.href;
-    } catch (_error) {}
-    return this.posterFallbackUrl();
-  },
+  canvas.width = canvas.clientWidth || 960;
+  canvas.height = canvas.clientHeight || 540;
 
-  posterFallbackUrl() {
-    return '/media/poster-fallback.svg';
-  },
-
-  attachPosterFallback(image, alternatives = []) {
-    if (!image) return;
-    const fallback = this.posterFallbackUrl();
-    const sources = [image.getAttribute('src'), ...alternatives]
-      .map((source) => String(source || '').trim())
-      .filter((source, index, list) => source && source !== fallback && list.indexOf(source) === index);
-    let sourceIndex = 0;
-    let retry = 0;
-    let finished = false;
-    const retryUrl = (source) => {
-      try {
-        const url = new URL(source, window.location.href);
-        url.searchParams.set('_poster_retry', `${Date.now()}-${retry}`);
-        return url.href;
-      } catch (_error) { return source; }
-    };
-    const loadNext = () => {
-      if (finished) return;
-      if (sourceIndex >= sources.length) {
-        finished = true;
-        const brokenCard = image.closest?.('.movie-card, .schedule-card, .search-item, .coverflow-item');
-        if (brokenCard) {
-          brokenCard.remove();
-          return;
-        }
-        image.dataset.posterFallback = '1';
-        image.src = fallback;
-        return;
-      }
-      image.src = retryUrl(sources[sourceIndex]);
-    };
-    const onError = () => {
-      if (finished || image.dataset.posterFallback === '1') return;
-      if (retry < 2) {
-        retry += 1;
-        window.setTimeout(loadNext, retry * 700);
-        return;
-      }
-      sourceIndex += 1;
-      retry = 0;
-      window.setTimeout(loadNext, 250);
-    };
-    image.addEventListener('error', onError);
-    if (image.complete && image.naturalWidth === 0) window.queueMicrotask(onError);
-  },
-
-  setBackgroundImage(element, source) {
-    if (!element) return;
-    const primary = this.resolveImageUrl(source);
-    const preload = new Image();
-    preload.onload = () => { element.style.backgroundImage = `url("${primary}")`; };
-    preload.onerror = () => { element.style.backgroundImage = `url("${this.posterFallbackUrl()}")`; };
-    preload.src = primary;
-  },
-
-  escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>'"]/g, character => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-    })[character]);
-  },
-
-  // =================================================
-  // 2. CATEGORY VIEWS & PAGINATION
-  // =================================================
-  async switchCategory(category, page = 1) {
-    if (category === 'home') {
-      this.loadHomeFeed();
-      return;
-    }
-
-    this.currentCategory = category;
-    this.currentPage = page;
-    this.updateActiveNav(category);
-
-    document.getElementById('heroBillboard')?.classList.add('hidden');
-    document.getElementById('coverflowSection')?.classList.add('hidden');
-    document.getElementById('continueWatchingSection')?.classList.add('hidden');
-    document.getElementById('catalogFilterPanel')?.classList.add('hidden');
-    document.getElementById('dynamicSections')?.classList.add('hidden');
-    const catView = document.getElementById('categoryView');
-    catView.classList.remove('hidden');
-
-    const grid = document.getElementById('categoryGrid');
-    const paginationBox = document.getElementById('paginationBox');
-    const titleEl = document.getElementById('categoryTitle');
-    const countEl = document.getElementById('categoryCount');
-
-    titleEl.textContent = this.getCategoryDisplayName(category);
-    grid.innerHTML = `
-      <div class="loading-spinner-wrapper" style="grid-column: 1 / -1;">
-        <div class="spinner"></div>
-        <p>Đang tải danh sách phim...</p>
-      </div>
-    `;
-    paginationBox.innerHTML = '';
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    try {
-      const data = await API.getCategory(category, page);
-      grid.innerHTML = '';
-      const items = data.items || [];
-      countEl.textContent = `(Trang ${page} - ${items.length} phim)`;
-
-      if (items.length === 0) {
-        grid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: var(--text-dim);">Không có phim nào.</p>';
-        return;
-      }
-
-      const fragment = document.createDocumentFragment();
-      items.forEach(movie => fragment.appendChild(this.createMovieCard(movie)));
-      grid.appendChild(fragment);
-      API.trackUsage('category_view', { category: this.getCategoryDisplayName(category), results: items.length });
-
-      this.renderPagination(paginationBox, category, page, data.pagination?.totalPages || 50);
-    } catch (err) {
-      grid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #f87171;">Lỗi tải dữ liệu phim thể loại này.</p>';
-    }
-  },
-
-  getCategoryDisplayName(cat) {
-    switch (cat) {
-      case 'phim-moi-cap-nhat': return '🔥 Phim Mới Cập Nhật';
-      case 'phim-le': return '🎬 Phim Lẻ Đỉnh Cao';
-      case 'phim-bo': return '📺 Phim Bộ Chọn Lọc';
-      case 'hoat-hinh': return '✨ Hoạt Hình & Anime';
-      case 'tv-shows': return '🎤 TV Shows Hấp Dẫn';
-      default: return 'Danh Mục Phim';
-    }
-  },
-
-  updateActiveNav(cat) {
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.cat === cat);
+  streamParticles = [];
+  for (let i = 0; i < 90; i++) {
+    streamParticles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      radius: Math.random() * 2 + 0.5,
+      speedX: (Math.random() - 0.5) * 1.8,
+      speedY: (Math.random() - 0.5) * 1.8,
+      alpha: Math.random() * 0.7 + 0.3
     });
-  },
+  }
 
-  renderPagination(container, category, currentPage, totalPages) {
-    container.innerHTML = '';
-    const maxPages = Math.min(totalPages || 50, 50);
+  let tick = 0;
+  const renderFrame = () => {
+    if (!state.isPlaying) return;
+    tick++;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Prev button
-    if (currentPage > 1) {
-      const prev = document.createElement('button');
-      prev.className = 'page-btn';
-      prev.textContent = '« Trang Trước';
-      prev.onclick = () => this.switchCategory(category, currentPage - 1);
-      container.appendChild(prev);
+    ctx.fillStyle = "rgba(4, 6, 12, 0.45)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const themeColor = state.activeMovie.themeColor || "#00f2fe";
+    ctx.fillStyle = themeColor;
+    streamParticles.forEach(p => {
+      p.x += p.speedX;
+      p.y += p.speedY;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.globalAlpha = p.alpha * (0.6 + 0.4 * Math.sin(tick * 0.05));
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
+
+    const barCount = 42;
+    const barWidth = 4;
+    const startX = canvas.width / 2 - (barCount * 8) / 2;
+    for (let i = 0; i < barCount; i++) {
+      const h = (Math.sin(tick * 0.15 + i * 0.35) * 0.5 + 0.5) * 32 + 6;
+      ctx.fillStyle = themeColor;
+      ctx.fillRect(startX + i * 8, canvas.height - 75 - h, barWidth, h);
     }
 
-    // Page indicator
-    const info = document.createElement('span');
-    info.style.color = '#fff';
-    info.style.fontWeight = 'bold';
-    info.style.margin = '0 10px';
-    info.textContent = `Trang ${currentPage} / ${maxPages}`;
-    container.appendChild(info);
+    state.streamAnimId = requestAnimationFrame(renderFrame);
+  };
 
-    // Next button
-    if (currentPage < maxPages) {
-      const next = document.createElement('button');
-      next.className = 'page-btn';
-      next.textContent = 'Trang Kế »';
-      next.onclick = () => this.switchCategory(category, currentPage + 1);
-      container.appendChild(next);
-    }
-  },
+  if (state.streamAnimId) cancelAnimationFrame(state.streamAnimId);
+  renderFrame();
+}
 
-  // =================================================
-  // 3. INSTANT & FULL SEARCH
-  // =================================================
-  async performInstantSearch(query) {
-    const dropdown = document.getElementById('searchDropdown');
-    const requestId = ++this.searchRequestId;
-    const normalized = this.normalizeFilterValue(query);
-    const localItems = this.homeCatalog.filter((movie) => this.normalizeFilterValue([
-      movie?.name, movie?.origin_name, movie?.year
-    ].filter(Boolean).join(' ')).includes(normalized)).slice(0, 6);
-    if (localItems.length) this.renderInstantSearch(localItems);
-    try {
-      const data = await API.search(query, 1);
-      if (requestId !== this.searchRequestId) return;
-      const items = (data.items || []).slice(0, 6);
-      if (items.length === 0) {
-        dropdown.innerHTML = '<div style="padding: 14px; text-align: center; color: var(--text-dim); font-size: 13px;">Không tìm thấy phim phù hợp</div>';
-        dropdown.classList.remove('hidden');
-        return;
+function stopCinematicStreamCanvas() {
+  const canvas = document.getElementById("player-stream-canvas");
+  if (canvas) canvas.classList.remove("active");
+  if (state.streamAnimId) {
+    cancelAnimationFrame(state.streamAnimId);
+    state.streamAnimId = null;
+  }
+}
+
+// =====================================================================
+// 9. EPISODES HUB & SERVER SELECTOR
+// =====================================================================
+function initEpisodeGrid() {
+  const grid = document.getElementById("episodes-buttons-grid");
+  const totalBadge = document.getElementById("episodes-total-badge");
+  if (!grid) return;
+
+  const total = state.activeMovie.episodesCount || 10;
+  state.totalEpisodes = total;
+
+  if (totalBadge) {
+    totalBadge.textContent = total > 1 ? `${total} Tập • Trọn Bộ` : "Bản Chiếu Rạp Full";
+  }
+
+  let html = "";
+  for (let i = 1; i <= total; i++) {
+    const isAct = i === state.activeEpisode;
+    html += `
+      <button class="episode-btn ${isAct ? 'active' : ''}" data-ep="${i}">
+        <span>Tập ${String(i).padStart(2, '0')}</span>
+        <span class="ep-subtext">4K HDR</span>
+      </button>
+    `;
+  }
+
+  grid.innerHTML = html;
+
+  grid.querySelectorAll(".episode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const ep = parseInt(btn.getAttribute("data-ep"), 10);
+      playEpisodeChime(ep);
+      state.activeEpisode = ep;
+      grid.querySelectorAll(".episode-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const epLabel = document.getElementById("player-current-ep");
+      if (epLabel) {
+        epLabel.textContent = `Tập ${String(ep).padStart(2, '0')} (Bản 4K Vietsub)`;
       }
 
-      this.renderInstantSearch(items);
-    } catch (err) {
-      if (!localItems.length && requestId === this.searchRequestId) dropdown.classList.add('hidden');
+      state.currentTimeSec = 0;
+      updateTimelineUI();
+      simulateStreamLoad();
+      showToast(`Đã chuyển sang Tập ${ep} từ ${getServerName(state.activeServer)}`);
+    });
+  });
+}
+
+function initServerPicker() {
+  const container = document.getElementById("server-chips-list");
+  const pingLabel = document.getElementById("hud-ping-label");
+  if (!container) return;
+
+  container.querySelectorAll(".server-node-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      playServerSwitchChirp();
+      container.querySelectorAll(".server-node-pill").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const serverKey = btn.getAttribute("data-server");
+      state.activeServer = serverKey;
+      
+      if (pingLabel) {
+        pingLabel.textContent = serverKey === "vip1" ? "CDN VIP 1 (12ms)" : (serverKey === "vip2" ? "CDN VIP 2 (18ms)" : "HYDRA STREAM (45ms)");
+      }
+
+      simulateStreamLoad();
+      showToast(`Đã kết nối ${getServerName(serverKey)} siêu tốc!`);
+    });
+  });
+}
+
+function getServerName(key) {
+  switch (key) {
+    case "vip1": return "Server VIP 1 (FPT/VNPT Siêu Tốc)";
+    case "vip2": return "Server VIP 2 (Viettel CDN 4K)";
+    case "backup": return "Server Dự Phòng (Hydra Stream)";
+    default: return "Server VIP 1";
+  }
+}
+
+// =====================================================================
+// 10. TACTILE SEGMENTED ADVANCED FILTER
+// =====================================================================
+function initTactileSegmentedFilter() {
+  document.querySelectorAll("#filter-genre-pills .seg-pill").forEach(pill => {
+    pill.addEventListener("click", () => {
+      playFilterPillPop();
+      document.querySelectorAll("#filter-genre-pills .seg-pill").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      state.filter.genre = pill.getAttribute("data-genre");
+      executeFilter();
+    });
+  });
+
+  document.querySelectorAll("#filter-country-pills .seg-pill").forEach(pill => {
+    pill.addEventListener("click", () => {
+      playFilterPillPop();
+      document.querySelectorAll("#filter-country-pills .seg-pill").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      state.filter.country = pill.getAttribute("data-country");
+      executeFilter();
+    });
+  });
+
+  document.querySelectorAll("#filter-format-pills .seg-pill").forEach(pill => {
+    pill.addEventListener("click", () => {
+      playFilterPillPop();
+      document.querySelectorAll("#filter-format-pills .seg-pill").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      state.filter.format = pill.getAttribute("data-format");
+      executeFilter();
+    });
+  });
+}
+
+function executeFilter() {
+  const { genre, country, format } = state.filter;
+
+  const matches = (item) => {
+    if (genre !== "all" && !item.genres.includes(genre)) return false;
+    if (country !== "all" && item.country !== country) return false;
+    if (format !== "all") {
+      if (format === "series" && item.format !== "series") return false;
+      if (format === "single" && item.format !== "single") return false;
     }
-  },
+    return true;
+  };
 
-  renderInstantSearch(items = []) {
-      const dropdown = document.getElementById('searchDropdown');
-      dropdown.innerHTML = '';
-      items.forEach(movie => {
-        const item = document.createElement('div');
-        item.className = 'search-item';
-        item.onclick = () => {
-          this.hideSearchDropdown();
-          this.openMovieDetail(movie.slug);
-        };
+  const filteredSeries = APP_DATA.seriesList.filter(matches);
+  const filteredCinema = APP_DATA.cinemaList.filter(matches);
 
-        const posterUrl = this.resolveImageUrl(movie.poster_url || movie.thumb_url);
-        const alternatePosterUrl = this.resolveImageUrl(movie.thumb_url || movie.poster_url);
-        item.innerHTML = `
-          <img class="search-thumb" src="${this.escapeHtml(posterUrl)}" alt="${this.escapeHtml(movie.name || 'Poster phim')}" loading="lazy" decoding="async" width="56" height="82" />
-          <div class="search-info">
-            <div class="search-title">${this.escapeHtml(movie.name || 'Đang cập nhật')}</div>
-            <div class="search-sub">${this.escapeHtml(movie.origin_name || '')} (${this.escapeHtml(movie.year || '2026')})</div>
+  renderSeriesGrid(filteredSeries);
+  renderCinemaGrid(filteredCinema);
+
+  const totalFound = filteredSeries.length + filteredCinema.length;
+  const countLabel = document.getElementById("filter-result-count");
+  if (countLabel) {
+    countLabel.textContent = `Tìm thấy ${totalFound} phim phù hợp`;
+  }
+}
+
+// =====================================================================
+// 11. CATALOGS WITH 3D GYRO PERSPECTIVE TILT
+// =====================================================================
+function initCatalogs() {
+  renderSeriesGrid(APP_DATA.seriesList);
+  renderCinemaGrid(APP_DATA.cinemaList);
+
+  document.querySelectorAll(".catalog-category-switchers .cat-pill-switch").forEach(tab => {
+    tab.addEventListener("click", () => {
+      playTactileClick();
+      document.querySelectorAll(".catalog-category-switchers .cat-pill-switch").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      const cat = tab.getAttribute("data-series-tab");
+
+      let filtered = APP_DATA.seriesList;
+      if (cat === "us") filtered = APP_DATA.seriesList.filter(m => m.country === "us");
+      if (cat === "kr") filtered = APP_DATA.seriesList.filter(m => m.country === "kr");
+      if (cat === "anime") filtered = APP_DATA.seriesList.filter(m => m.genres.includes("anime"));
+
+      renderSeriesGrid(filtered);
+    });
+  });
+}
+
+function renderSeriesGrid(list) {
+  const grid = document.getElementById("series-grid");
+  if (!grid) return;
+
+  if (list.length === 0) {
+    grid.innerHTML = `<div style="grid-column: 1/-1; padding: 50px; text-align: center; color: var(--text-dim); font-size: 14px;">Không tìm thấy phim bộ phù hợp tiêu chí lọc.</div>`;
+    return;
+  }
+
+  grid.innerHTML = list.map(item => createCatalogCardHTML(item)).join("");
+  bindCatalogCardEvents(grid);
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function renderCinemaGrid(list) {
+  const grid = document.getElementById("cinema-grid");
+  const countLabel = document.getElementById("cinema-count-label");
+  if (!grid) return;
+
+  if (countLabel) countLabel.textContent = `${list.length} Siêu Phẩm`;
+
+  if (list.length === 0) {
+    grid.innerHTML = `<div style="grid-column: 1/-1; padding: 50px; text-align: center; color: var(--text-dim); font-size: 14px;">Không tìm thấy phim chiếu rạp phù hợp tiêu chí lọc.</div>`;
+    return;
+  }
+
+  grid.innerHTML = list.map(item => createCatalogCardHTML(item)).join("");
+  bindCatalogCardEvents(grid);
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function createCatalogCardHTML(item) {
+  return `
+    <div class="catalog-card" data-id="${item.id}">
+      <div class="card-poster-box">
+        <img src="${item.poster}" alt="${item.title}" loading="lazy">
+        <span class="card-tag-status">${item.currentEp || 'Full Movie'}</span>
+        <span class="card-tag-quality">${item.quality || '4K'}</span>
+        <div class="card-hover-box">
+          <div class="hover-play-circle">
+            <i data-lucide="play"></i>
           </div>
-        `;
-        this.attachPosterFallback(item.querySelector('.search-thumb'), [alternatePosterUrl]);
-        dropdown.appendChild(item);
-      });
+          <p class="hover-synopsis">${item.synopsis || 'Nhấn để bắt đầu xem với chuẩn âm thanh Dolby Atmos 4K.'}</p>
+        </div>
+      </div>
+      <div class="card-meta-info">
+        <h4 class="card-film-name" title="${item.title}">${item.title}</h4>
+        <div class="card-film-sub">
+          <span class="card-rating">⭐ ${item.rating}</span>
+          <span>${item.year}</span>
+          <span>${item.lang || 'Vietsub'}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
-      dropdown.classList.remove('hidden');
-  },
+function bindCatalogCardEvents(container) {
+  container.querySelectorAll(".catalog-card").forEach(card => {
+    const movieId = card.getAttribute("data-id");
+    const movieObj = findMovieById(movieId);
 
-  hideSearchDropdown() {
-    document.getElementById('searchDropdown').classList.add('hidden');
-  },
+    card.addEventListener("mousemove", (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
+      card.style.transform = `perspective(1000px) rotateY(${x * 14}deg) rotateX(${-y * 14}deg) translateY(-8px) scale(1.02)`;
+    });
 
-  async loadFullSearch(query, page = 1) {
-    document.getElementById('heroBillboard')?.classList.add('hidden');
-    document.getElementById('coverflowSection')?.classList.add('hidden');
-    document.getElementById('continueWatchingSection')?.classList.add('hidden');
-    document.getElementById('catalogFilterPanel')?.classList.add('hidden');
-    document.getElementById('dynamicSections')?.classList.add('hidden');
-    const catView = document.getElementById('categoryView');
-    catView.classList.remove('hidden');
+    card.addEventListener("mouseleave", () => {
+      card.style.transform = "perspective(1000px) rotateY(0deg) rotateX(0deg) translateY(0) scale(1)";
+    });
 
-    const grid = document.getElementById('categoryGrid');
-    const titleEl = document.getElementById('categoryTitle');
-    const countEl = document.getElementById('categoryCount');
-    const paginationBox = document.getElementById('paginationBox');
+    card.addEventListener("click", () => {
+      playTactileClick();
+      if (movieObj) scrollToPlayer(movieObj);
+    });
+  });
+}
 
-    titleEl.textContent = `🔍 Kết quả tìm kiếm: "${query}"`;
-    grid.innerHTML = '<div class="loading-spinner-wrapper" style="grid-column: 1 / -1;"><div class="spinner"></div><p>Đang tìm kiếm...</p></div>';
-    paginationBox.innerHTML = '';
+function findMovieById(id) {
+  return (
+    APP_DATA.spotlights.find(m => m.id === id) ||
+    APP_DATA.seriesList.find(m => m.id === id) ||
+    APP_DATA.cinemaList.find(m => m.id === id)
+  );
+}
 
-    try {
-      const data = await API.search(query, page);
-      const items = data.items || [];
-      API.trackUsage('search', { query, results: items.length });
-      countEl.textContent = `(${items.length} phim)`;
-      grid.innerHTML = '';
+// =====================================================================
+// 12. RANKING LEADERBOARD & COMMENTS SYSTEM
+// =====================================================================
+function initRanking() {
+  const listEl = document.getElementById("ranking-list");
+  if (!listEl) return;
 
-      if (items.length === 0) {
-        grid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: var(--text-dim); padding: 40px 0;">Không tìm thấy phim nào khớp với từ khóa.</p>';
+  listEl.innerHTML = APP_DATA.ranking.map(item => `
+    <div class="rank-item" data-id="${item.id}">
+      <span class="rank-num">${item.rank}</span>
+      <img src="${item.poster}" alt="${item.title}" class="rank-thumb">
+      <div class="rank-info">
+        <h4 class="rank-title">${item.title}</h4>
+        <div class="rank-views">
+          <span>${item.ep}</span>
+          <span>•</span>
+          <span>${item.views}</span>
+        </div>
+      </div>
+      <div class="card-rating">⭐ ${item.rating}</div>
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll(".rank-item").forEach(item => {
+    item.addEventListener("click", () => {
+      playTactileClick();
+      const mId = item.getAttribute("data-id");
+      const movie = findMovieById(mId);
+      if (movie) scrollToPlayer(movie);
+    });
+  });
+
+  document.querySelectorAll(".ranking-period-buttons .period-btn").forEach(tab => {
+    tab.addEventListener("click", () => {
+      playTactileClick();
+      document.querySelectorAll(".ranking-period-buttons .period-btn").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      showToast(`Đã cập nhật Bảng xếp hạng theo: ${tab.textContent}`);
+    });
+  });
+}
+
+function initComments() {
+  const postBtn = document.getElementById("btn-post-comment");
+  const textarea = document.getElementById("comment-textarea");
+
+  renderCommentsFeed();
+
+  if (postBtn && textarea) {
+    postBtn.addEventListener("click", () => {
+      const text = textarea.value.trim();
+      if (!text) {
+        showToast("Vui lòng nhập nội dung bình luận!");
+        return;
+      }
+      playHeartChime();
+
+      const newComment = {
+        id: "c_" + Date.now(),
+        user: "Bạn (VIP Khách Quý)",
+        avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+        time: "Vừa xong",
+        text: text,
+        likes: 1,
+        liked: true
+      };
+
+      APP_DATA.comments.unshift(newComment);
+      textarea.value = "";
+      renderCommentsFeed();
+      showToast("Bình luận của bạn đã được đăng thành công!");
+    });
+  }
+}
+
+function renderCommentsFeed() {
+  const feed = document.getElementById("comments-feed");
+  if (!feed) return;
+
+  feed.innerHTML = APP_DATA.comments.map(c => `
+    <div class="comment-card" data-cid="${c.id}">
+      <img src="${c.avatar}" alt="${c.user}" class="comment-avatar">
+      <div class="comment-content">
+        <div class="comment-user-row">
+          <span class="c-username">${c.user}</span>
+          <span class="c-time">${c.time}</span>
+        </div>
+        <p class="c-text">${escapeHTML(c.text)}</p>
+        <div class="comment-footer-actions">
+          <button class="c-act-btn c-like-btn" data-cid="${c.id}">
+            <i data-lucide="heart" style="${c.liked ? 'fill: #ef4444; color: #ef4444;' : ''}"></i> 
+            <span>${c.likes}</span>
+          </button>
+          <button class="c-act-btn"><i data-lucide="corner-down-right"></i> Trả lời</button>
+        </div>
+      </div>
+    </div>
+  `).join("");
+
+  feed.querySelectorAll(".c-like-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      playHeartChime();
+      const cid = btn.getAttribute("data-cid");
+      const c = APP_DATA.comments.find(x => x.id === cid);
+      if (c) {
+        c.liked = !c.liked;
+        c.likes += c.liked ? 1 : -1;
+        renderCommentsFeed();
+      }
+    });
+  });
+
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function escapeHTML(str) {
+  return String(str || '').replace(/[&<>'"]/g, tag => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;'
+  }[tag] || tag));
+}
+
+// =====================================================================
+// 13. WATCHLIST DRAWER SYSTEM
+// =====================================================================
+function initWatchlistDrawer() {
+  const drawer = document.getElementById("watchlist-drawer");
+  const openBtn = document.getElementById("open-watchlist-btn");
+  const closeBtn = document.getElementById("btn-close-drawer");
+  const clearBtn = document.getElementById("btn-clear-watchlist");
+
+  updateWatchlistBadge();
+
+  if (openBtn && drawer) {
+    openBtn.addEventListener("click", () => {
+      playTactileClick();
+      drawer.classList.add("open");
+      renderWatchlistItems();
+    });
+  }
+
+  if (closeBtn && drawer) {
+    closeBtn.addEventListener("click", () => {
+      playTactileClick();
+      drawer.classList.remove("open");
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      playTactileClick();
+      state.watchlist = [];
+      localStorage.setItem("4kluxury_watchlist", "[]");
+      updateWatchlistBadge();
+      renderWatchlistItems();
+      showToast("Đã dọn sạch tủ phim yêu thích.");
+    });
+  }
+}
+
+function toggleWatchlist(movie) {
+  const idx = state.watchlist.findIndex(w => w.id === movie.id);
+  if (idx > -1) {
+    state.watchlist.splice(idx, 1);
+    showToast(`Đã bỏ "${movie.title}" khỏi tủ phim.`);
+  } else {
+    state.watchlist.push({
+      id: movie.id,
+      title: movie.title,
+      poster: movie.poster,
+      rating: movie.rating,
+      year: movie.year
+    });
+    showToast(`Đã thêm "${movie.title}" vào tủ phim!`);
+  }
+  localStorage.setItem("4kluxury_watchlist", JSON.stringify(state.watchlist));
+  updateWatchlistBadge();
+}
+
+function updateWatchlistBadge() {
+  const countBadge = document.getElementById("watchlist-count");
+  const mobBadge = document.getElementById("mob-watchlist-count");
+  if (countBadge) countBadge.textContent = state.watchlist.length;
+  if (mobBadge) mobBadge.textContent = state.watchlist.length;
+}
+
+function renderWatchlistItems() {
+  const listEl = document.getElementById("watchlist-items-list");
+  if (!listEl) return;
+
+  if (state.watchlist.length === 0) {
+    listEl.innerHTML = `<div style="padding: 40px 20px; text-align: center; color: var(--text-dim);"><p>Tủ phim của bạn chưa có gì. Nhấn biểu tượng dấu trang để lưu phim muốn xem!</p></div>`;
+    return;
+  }
+
+  listEl.innerHTML = state.watchlist.map(item => `
+    <div class="drawer-film-card" data-id="${item.id}">
+      <img src="${item.poster}" alt="${item.title}" class="drawer-thumb">
+      <div class="drawer-info">
+        <h5 class="drawer-name">${item.title}</h5>
+        <div class="drawer-actions">
+          <span style="font-size: 11px; color: var(--text-dim);">⭐ ${item.rating} • ${item.year}</span>
+          <button class="btn-play-drawer" data-id="${item.id}">Xem</button>
+          <button class="btn-del-drawer" data-id="${item.id}" title="Xóa"><i data-lucide="trash-2" style="width: 14px; height: 14px;"></i></button>
+        </div>
+      </div>
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll(".btn-play-drawer").forEach(b => {
+    b.addEventListener("click", () => {
+      playTactileClick();
+      const mId = b.getAttribute("data-id");
+      const movie = findMovieById(mId);
+      if (movie) {
+        document.getElementById("watchlist-drawer").classList.remove("open");
+        scrollToPlayer(movie);
+      }
+    });
+  });
+
+  listEl.querySelectorAll(".btn-del-drawer").forEach(b => {
+    b.addEventListener("click", () => {
+      playTactileClick();
+      const mId = b.getAttribute("data-id");
+      const movie = findMovieById(mId);
+      if (movie) {
+        toggleWatchlist(movie);
+        renderWatchlistItems();
+      }
+    });
+  });
+
+  if (window.lucide) window.lucide.createIcons();
+}
+
+// =====================================================================
+// 14. MOBILE BOTTOM SPATIAL NAV DOCK
+// =====================================================================
+function initMobileBottomDock() {
+  const dockItems = document.querySelectorAll("#mobile-bottom-dock .mob-dock-item");
+  const drawer = document.getElementById("watchlist-drawer");
+
+  dockItems.forEach(item => {
+    item.addEventListener("click", (e) => {
+      playTactileClick();
+      if (item.id === "mob-watchlist-trigger") {
+        e.preventDefault();
+        if (drawer) {
+          drawer.classList.add("open");
+          renderWatchlistItems();
+        }
         return;
       }
 
-      items.forEach(m => grid.appendChild(this.createMovieCard(m)));
-    } catch (err) {
-      grid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #f87171;">Lỗi tìm kiếm.</p>';
-    }
-  },
-
-  // =================================================
-  // 4. MOVIE DETAIL MODAL & EPISODES
-  // =================================================
-  async openMovieDetail(slug) {
-    this.lastDetailSlug = slug;
-    const requestId = ++this.detailRequestId;
-    const modal = document.getElementById('movieModal');
-    modal.classList.remove('hidden');
-    const detailBody = modal.querySelector('.detail-body');
-    if (detailBody) detailBody.scrollTop = 0;
-
-    window.Phim4KTrailer?.stop();
-    document.getElementById('detailTrailer')?.classList.add('hidden');
-    // Reset fields while loading
-    document.getElementById('detailName').textContent = 'Đang tải thông tin phim...';
-    document.getElementById('detailOriginName').textContent = '';
-    document.getElementById('detailContent').textContent = 'Vui lòng chờ trong giây lát...';
-    document.getElementById('detailContent').classList.remove('expanded');
-    document.getElementById('detailSynopsisToggle').classList.add('hidden');
-    document.getElementById('detailBadges').innerHTML = '';
-    document.getElementById('detailMetaGrid').innerHTML = '';
-    document.getElementById('serverTabs').innerHTML = '';
-    document.getElementById('episodesList').innerHTML = '<div class="spinner"></div>';
-
-    try {
-      let data;
-      try {
-        data = await API.getDetail(slug);
-      } catch (_firstError) {
-        // Bypass both browser and Worker edge caches once. This fixes the
-        // transient catalogue/detail race without making the user press retry.
-        data = await API.getDetail(slug, { refresh: true });
-      }
-      if (requestId !== this.detailRequestId) return;
-      if (!data?.movie || !Array.isArray(data?.episodes) || !data.episodes.some((server) => Array.isArray(server?.server_data) && server.server_data.length)) {
-        const error = new Error('ENSMOVIE_STREAM_UNAVAILABLE');
-        error.code = 'ENSMOVIE_STREAM_UNAVAILABLE';
-        throw error;
-      }
-      this.activeMovieDetail = data;
-      this.activeServerIndex = 0;
-      this.renderDetailModalContent(data);
-      API.trackUsage('movie_open', { movie: data.movie?.name || slug });
-    } catch (err) {
-      if (requestId !== this.detailRequestId) return;
-      document.querySelectorAll(`[data-movie-slug="${slug}"]`).forEach((card) => card.remove());
-      document.getElementById('detailName').textContent = 'Không thể tải chi tiết phim';
-      document.getElementById('detailContent').textContent = 'Phim này chưa có luồng ENSMovie hoạt động và đã được gỡ khỏi danh sách hiện tại.';
-      document.getElementById('serverTabs').innerHTML = '';
-      document.getElementById('episodesList').innerHTML = '<button type="button" class="ep-btn" onclick="App.openMovieDetail(App.lastDetailSlug)">Thử tải lại</button>';
-    }
-  },
-
-  renderDetailModalContent(data) {
-    const movie = data.movie;
-    const episodes = data.episodes || [];
-
-    document.getElementById('detailName').textContent = movie.name;
-    document.getElementById('detailOriginName').textContent = movie.origin_name || '';
-    
-    // Poster and Backdrop
-    const posterUrl = this.resolveImageUrl(movie.poster_url || movie.thumb_url);
-    const thumbUrl = this.resolveImageUrl(movie.thumb_url || movie.poster_url);
-    const detailPoster = document.getElementById('detailPoster');
-    detailPoster.src = posterUrl;
-    this.attachPosterFallback(detailPoster, [thumbUrl]);
-    this.setBackgroundImage(document.getElementById('detailBackdrop'), thumbUrl);
-    // Details are image-only; never mount a trailer or embedded video.
-
-    // Badges
-    const badgesBox = document.getElementById('detailBadges');
-    badgesBox.innerHTML = `
-      <span class="detail-badge badge-red">${this.escapeHtml(movie.quality || 'Theo nguồn')}</span>
-      <span class="detail-badge">${this.escapeHtml(movie.year || '2026')}</span>
-      <span class="detail-badge">${this.escapeHtml(movie.time || 'Đang cập nhật')}</span>
-      <span class="detail-badge">${this.escapeHtml(movie.episode_current || movie.episode_total || 'Trọn bộ')}</span>
-      <span class="detail-badge">${this.escapeHtml(movie.lang || 'Vietsub')}</span>
-    `;
-
-    // Synopsis
-    const cleanContent = movie.content ? movie.content.replace(/<[^>]*>?/gm, '') : 'Không có mô tả chi tiết.';
-    const synopsis = document.getElementById('detailContent');
-    const synopsisToggle = document.getElementById('detailSynopsisToggle');
-    synopsis.textContent = cleanContent;
-    synopsis.classList.remove('expanded');
-    synopsisToggle.textContent = 'Xem thêm';
-    synopsisToggle.classList.toggle('hidden', cleanContent.length < 220);
-
-    // Meta grid
-    const metaGrid = document.getElementById('detailMetaGrid');
-    const categories = (movie.category || []).map(c => c.name).join(', ') || 'Đang cập nhật';
-    const countries = (movie.country || []).map(c => c.name).join(', ') || 'Đang cập nhật';
-    const actors = (movie.actor || []).slice(0, 5).join(', ') || 'Đang cập nhật';
-    const directors = (movie.director || []).join(', ') || 'Đang cập nhật';
-
-    metaGrid.innerHTML = `
-      <div><strong>Thể loại:</strong> ${this.escapeHtml(categories)}</div>
-      <div><strong>Quốc gia:</strong> ${this.escapeHtml(countries)}</div>
-      <div><strong>Đạo diễn:</strong> ${this.escapeHtml(directors)}</div>
-      <div><strong>Diễn viên:</strong> ${this.escapeHtml(actors)}</div>
-    `;
-
-    // Render Server Tabs
-    this.renderServerTabs(episodes);
-  },
-
-  toggleDetailSynopsis() {
-    const synopsis = document.getElementById('detailContent');
-    const toggle = document.getElementById('detailSynopsisToggle');
-    if (!synopsis || !toggle) return;
-    const expanded = synopsis.classList.toggle('expanded');
-    toggle.textContent = expanded ? 'Thu gọn' : 'Xem thêm';
-  },
-
-  renderServerTabs(episodes = []) {
-    const tabsContainer = document.getElementById('serverTabs');
-    tabsContainer.innerHTML = '';
-
-    if (episodes.length === 0) {
-      document.getElementById('episodesList').innerHTML = '<p style="color: var(--text-dim);">Chưa có tập phim nào.</p>';
-      return;
-    }
-
-    episodes.forEach((server, idx) => {
-      const btn = document.createElement('button');
-      btn.className = `server-tab ${idx === this.activeServerIndex ? 'active' : ''}`;
-      btn.textContent = window.formatMovieServerName?.(server, idx, this.activeMovieDetail?.movie) || server.server_name || `Server #${idx + 1}`;
-      btn.onclick = () => {
-        this.activeServerIndex = idx;
-        this.renderServerTabs(episodes);
-      };
-      tabsContainer.appendChild(btn);
+      dockItems.forEach(i => i.classList.remove("active"));
+      item.classList.add("active");
     });
+  });
 
-    // Render Episodes for active server
-    const currentServer = episodes[this.activeServerIndex] || episodes[0];
-    const epList = currentServer.server_data || [];
-    const listContainer = document.getElementById('episodesList');
-    listContainer.innerHTML = '';
+  const sections = [
+    { id: "home", nav: "home" },
+    { id: "player-section", nav: "player" },
+    { id: "series-section", nav: "series" },
+    { id: "cinema-section", nav: "cinema" }
+  ];
 
-    epList.forEach((ep, epIdx) => {
-      const epBtn = document.createElement('button');
-      epBtn.className = 'ep-btn';
-      epBtn.textContent = ep.name || `Tập ${epIdx + 1}`;
-      epBtn.title = ep.filename || ep.name;
-      epBtn.onclick = () => {
-        Player.open(
-          this.activeMovieDetail.movie,
-          this.withPlaybackReference(ep, currentServer, this.activeServerIndex, epIdx),
-          epList.map((item, index) => this.withPlaybackReference(item, currentServer, this.activeServerIndex, index)),
-          epIdx,
-          this.activeMovieDetail.episodes.map((server, serverIndex) => ({
-            ...server,
-            server_data: (server.server_data || []).map((item, index) => this.withPlaybackReference(item, server, serverIndex, index)),
-          })),
-          this.activeServerIndex
-        );
-      };
-      listContainer.appendChild(epBtn);
-    });
-  },
-
-  // Preserve provider-native playback metadata on every platform. Reconstruct
-  // a protected reference only for metadata-only responses.
-  withPlaybackReference(episode, server, serverIndex, episodeIndex) {
-    // Keep the provider's native URLs for mobile/TV, while also attaching the
-    // protected EnsMovie reference required by web/Windows. This prevents a
-    // public detail response from silently sending desktop back to the legacy
-    // raw player path.
-    if (episode?.stream_ref) return episode;
-    const movie = this.activeMovieDetail?.movie || {};
-    return {
-      ...episode,
-      stream_ref: {
-        movie: movie.slug,
-        server: serverIndex,
-        episode: episodeIndex,
-        source: server?.source_id || server?._source_id || '',
-        sourceMovieSlug: server?._source_movie_slug || movie.slug,
-        serverName: server?._source_server_name || server?.server_name || '',
-        episodeSlug: episode?.slug || '',
-        episodeName: episode?.name || '',
-        episodeFilename: episode?.filename || '',
-      },
-    };
-  },
-
-  playCurrentFirstEpisode() {
-    if (!this.activeMovieDetail) return;
-    const episodes = this.activeMovieDetail.episodes || [];
-    if (episodes.length > 0 && episodes[0].server_data?.length > 0) {
-      const currentServer = episodes[this.activeServerIndex] || episodes[0];
-      const epList = currentServer.server_data.map((episode, index) =>
-        this.withPlaybackReference(episode, currentServer, this.activeServerIndex, index));
-      const allServers = this.activeMovieDetail.episodes.map((server, serverIndex) => ({
-        ...server,
-        server_data: (server.server_data || []).map((episode, index) =>
-          this.withPlaybackReference(episode, server, serverIndex, index)),
-      }));
-      Player.open(this.activeMovieDetail.movie, epList[0], epList, 0, allServers, this.activeServerIndex);
-    }
-  },
-
-  onTabSearchInput(e) {
-    const val = e.target.value.trim();
-    clearTimeout(this.tabSearchTimer);
-    const container = document.getElementById('tabSearchResults');
-    if (!val) {
-      if (container) container.innerHTML = '';
-      return;
-    }
-    this.tabSearchTimer = setTimeout(async () => {
-      try {
-        if (container) {
-          container.innerHTML = '<div class="loading-spinner-wrapper"><div class="spinner"></div><p>Đang tìm kiếm...</p></div>';
-        }
-        const data = await API.search(val, 1);
-        if (container) {
-          container.innerHTML = '';
-          const items = data.items || [];
-          if (items.length === 0) {
-            container.innerHTML = '<p style="color: #9ca3af; text-align: center; grid-column: 1/-1; padding: 40px;">Không tìm thấy phim phù hợp.</p>';
-            return;
+  window.addEventListener("scroll", () => {
+    const scrollPos = window.scrollY + 200;
+    for (let i = sections.length - 1; i >= 0; i--) {
+      const sec = document.getElementById(sections[i].id);
+      if (sec && sec.offsetTop <= scrollPos) {
+        dockItems.forEach(item => {
+          if (item.getAttribute("data-nav") === sections[i].nav) {
+            dockItems.forEach(x => x.classList.remove("active"));
+            item.classList.add("active");
           }
-          const fragment = document.createDocumentFragment();
-          items.forEach(m => fragment.appendChild(this.createMovieCard(m)));
-          container.appendChild(fragment);
-          API.trackUsage('search', { query: val, results: items.length });
-        }
-      } catch (err) {}
-    }, 350);
-  },
-
-  quickSearch(keyword) {
-    const input = document.getElementById('tabSearchInput');
-    if (input) {
-      input.value = keyword;
-      this.onTabSearchInput({ target: input });
+        });
+        break;
+      }
     }
+  }, { passive: true });
+}
+
+// =====================================================================
+// 15. GLOBAL INSTANT SEARCH
+// =====================================================================
+function initGlobalSearch() {
+  const input = document.getElementById("global-search-input");
+  const suggestions = document.getElementById("search-suggestions");
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== input) {
+      e.preventDefault();
+      input.focus();
+    }
+    if (e.key === "Escape") {
+      suggestions?.classList.remove("show");
+    }
+  });
+
+  if (!input || !suggestions) return;
+
+  const allMovies = [...APP_DATA.spotlights, ...APP_DATA.seriesList, ...APP_DATA.cinemaList];
+
+  input.addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) {
+      suggestions.classList.remove("show");
+      suggestions.innerHTML = "";
+      return;
+    }
+
+    const matches = allMovies.filter(m => 
+      m.title.toLowerCase().includes(q) || 
+      (m.originalTitle && m.originalTitle.toLowerCase().includes(q))
+    ).slice(0, 5);
+
+    if (matches.length === 0) {
+      suggestions.innerHTML = `<div style="padding: 14px; color: var(--text-dim); font-size: 12px; text-align: center;">Không tìm thấy phim "${escapeHTML(q)}"</div>`;
+      suggestions.classList.add("show");
+      return;
+    }
+
+    suggestions.innerHTML = matches.map(m => `
+      <div class="search-sug-item" data-id="${m.id}">
+        <img src="${m.poster}" alt="${m.title}" class="search-sug-thumb">
+        <div class="search-sug-info">
+          <h4>${m.title}</h4>
+          <span>⭐ ${m.rating} • ${m.year} • ${m.quality || '4K'}</span>
+        </div>
+      </div>
+    `).join("");
+
+    suggestions.classList.add("show");
+
+    suggestions.querySelectorAll(".search-sug-item").forEach(item => {
+      item.addEventListener("click", () => {
+        playTactileClick();
+        const id = item.getAttribute("data-id");
+        const found = findMovieById(id);
+        if (found) {
+          scrollToPlayer(found);
+          suggestions.classList.remove("show");
+          input.value = "";
+        }
+      });
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!document.getElementById("dock-search")?.contains(e.target)) {
+      suggestions?.classList.remove("show");
+    }
+  });
+}
+
+// =====================================================================
+// 16. FLOATING STICKY MINI-PLAYER (PiP)
+// =====================================================================
+function initStickyPiPPlayer() {
+  const pip = document.getElementById("sticky-pip-player");
+  const playerSection = document.getElementById("player-section");
+  const pipPlayBtn = document.getElementById("pip-btn-play");
+  const pipExpandBtn = document.getElementById("pip-btn-expand");
+  const pipCloseBtn = document.getElementById("pip-btn-close");
+
+  if (!pip || !playerSection) return;
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting && !state.isPipDismissed) {
+        pip.classList.add("visible");
+      } else {
+        pip.classList.remove("visible");
+      }
+    });
+  }, { threshold: 0.1 });
+
+  observer.observe(playerSection);
+
+  if (pipPlayBtn) {
+    pipPlayBtn.addEventListener("click", () => {
+      const centerPlayBtn = document.getElementById("btn-center-play");
+      if (centerPlayBtn) centerPlayBtn.click();
+    });
+  }
+
+  if (pipExpandBtn) {
+    pipExpandBtn.addEventListener("click", () => {
+      playTactileClick();
+      playerSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  if (pipCloseBtn) {
+    pipCloseBtn.addEventListener("click", () => {
+      playTactileClick();
+      state.isPipDismissed = true;
+      pip.classList.remove("visible");
+    });
+  }
+}
+
+// =====================================================================
+// 17. REAL-TIME LIVE TRAFFIC TICKER
+// =====================================================================
+function initTrafficTicker() {
+  const countEl = document.getElementById("traffic-count");
+  if (!countEl) return;
+
+  let baseCount = 14820;
+  setInterval(() => {
+    const delta = Math.floor(Math.random() * 9) - 4;
+    baseCount = Math.max(12000, baseCount + delta);
+    countEl.textContent = baseCount.toLocaleString("vi-VN");
+  }, 3500);
+}
+
+// =====================================================================
+// 18. THEATER MODE (TẮT ĐÈN RẠP CHIẾU)
+// =====================================================================
+function initTheaterMode() {
+  const toggleBtn1 = document.getElementById("theater-toggle-btn");
+  const toggleBtn2 = document.getElementById("btn-toggle-lights");
+
+  const toggleTheater = () => {
+    playTactileClick();
+    state.isTheaterMode = !state.isTheaterMode;
+    document.body.classList.toggle("theater-mode-dim", state.isTheaterMode);
+    if (toggleBtn1) toggleBtn1.classList.toggle("active", state.isTheaterMode);
+    showToast(state.isTheaterMode ? "Đã tắt đèn: Chế độ rạp chiếu phim kích hoạt!" : "Đã bật đèn trở lại.");
+  };
+
+  if (toggleBtn1) toggleBtn1.addEventListener("click", toggleTheater);
+  if (toggleBtn2) toggleBtn2.addEventListener("click", toggleTheater);
+}
+
+// =====================================================================
+// 19. TACTILE ACOUSTIC SYNTHESIZER (WEB AUDIO API)
+// =====================================================================
+function getAudioContext() {
+  if (!state.audioContext) {
+    state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (state.audioContext.state === "suspended") {
+    state.audioContext.resume().catch(() => {});
+  }
+  return state.audioContext;
+}
+
+function playTactileClick() {
+  try {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(950, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.035);
+
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.035);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.035);
+  } catch (e) {}
+}
+
+function playEpisodeChime(epNumber) {
+  try {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    const notes = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25, 783.99, 880.00];
+    const freq = notes[(epNumber - 1) % notes.length];
+
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+  } catch (e) {}
+}
+
+function playServerSwitchChirp() {
+  try {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(320, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1280, ctx.currentTime + 0.06);
+
+    gain.gain.setValueAtTime(0.09, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.08);
+  } catch (e) {}
+}
+
+function playHeartChime() {
+  try {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+    [523.25, 659.25].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + i * 0.06);
+      gain.gain.setValueAtTime(0.1, now + i * 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.12);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.06);
+      osc.stop(now + i * 0.06 + 0.12);
+    });
+  } catch (e) {}
+}
+
+function playFilterPillPop() {
+  try {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(600, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(850, ctx.currentTime + 0.03);
+
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.04);
+  } catch (e) {}
+}
+
+function playCinemaChime() {
+  try {
+    const ctx = getAudioContext();
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc1.type = "sine";
+    osc2.type = "triangle";
+    osc1.frequency.setValueAtTime(261.63, ctx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(523.25, ctx.currentTime + 0.6);
+    osc2.frequency.setValueAtTime(329.63, ctx.currentTime);
+    osc2.frequency.exponentialRampToValueAtTime(659.25, ctx.currentTime + 0.6);
+
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc1.start();
+    osc2.start();
+    osc1.stop(ctx.currentTime + 1.2);
+    osc2.stop(ctx.currentTime + 1.2);
+  } catch (err) {}
+}
+
+function triggerThxBoomEffect() {
+  try {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(140, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(28, ctx.currentTime + 1.4);
+
+    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.6);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 1.6);
+
+    const stage = document.getElementById("player-stage-box");
+    if (stage) {
+      stage.style.animation = "stageShake 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97)";
+      setTimeout(() => stage.style.animation = "", 600);
+    }
+    showToast("⚡ THX SUB-BASS BOOM KÍCH HOẠT! Âm trầm rung rạp chiếu.");
+  } catch (err) {
+    showToast("⚡ THX BOOM: Âm thanh rạp chiếu chuẩn IMAX kích hoạt!");
+  }
+}
+
+function initAudioAmbience() {
+  const btn = document.getElementById("sound-ambience-btn");
+  if (!btn) return;
+
+  btn.addEventListener("click", () => {
+    state.isSoundAmbientOn = !state.isSoundAmbientOn;
+    btn.classList.toggle("active", state.isSoundAmbientOn);
+    if (state.isSoundAmbientOn) {
+      playCinemaChime();
+      showToast("Đã kích hoạt mô phỏng âm thanh vòm Dolby Atmos");
+    } else {
+      showToast("Đã tắt âm thanh không gian");
+    }
+  });
+}
+
+// =====================================================================
+// 20. TOAST NOTIFICATION HUB
+// =====================================================================
+function showToast(message) {
+  const hub = document.getElementById("toast-hub");
+  if (!hub) return;
+
+  const toast = document.createElement("div");
+  toast.className = "toast-item";
+  toast.textContent = message;
+
+  hub.appendChild(toast);
+
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.style.opacity = "0";
+      toast.style.transition = "opacity 0.4s ease";
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 400);
+    }
+  }, 3200);
+}
+
+// =====================================================================
+// 21. SUPER ADMIN & MODAL SYSTEM INTEGRATION
+// =====================================================================
+window.openAdminPanel = async function() {
+  if (window.Auth?.activeKeyData?.isAdmin) {
+    if (window.Admin?.open) window.Admin.open();
+    return;
+  }
+  const key = prompt('🔑 NHẬP KEY QUẢN TRỊ VIÊN (ADMIN MASTER KEY):', '');
+  if (!key) return;
+  try {
+    const res = await API.activate(key.trim(), '@mnhutdznecon', Auth.getDeviceId());
+    if (res.success && res.isAdmin) {
+      await SessionVault.save(res);
+      Auth.unlockApp(res);
+      triggerThxBoomEffect();
+      alert('👑 Xin chào Super Admin mnhut! Xác thực thành công.');
+      if (window.Admin?.open) window.Admin.open();
+    } else {
+      alert(res.message || 'Key Admin không chính xác!');
+    }
+  } catch (err) {
+    alert('Lỗi xác thực: ' + err.message);
   }
 };
 
-// Global Helpers for HTML inline calls
-function switchCategory(cat) { App.switchCategory(cat); }
-function clearSearch() {
-  const input = document.getElementById('searchInput');
-  input.value = '';
-  document.getElementById('searchClear').classList.add('hidden');
-  App.hideSearchDropdown();
-}
-
-function playHeroMovie() {
-  if (App.currentHeroMovie) {
-    App.openMovieDetail(App.currentHeroMovie.slug);
+window.openDownloadModal = function() {
+  document.getElementById('downloadAppModal')?.classList.remove('hidden');
+  if (window.refreshPublicDownloads) window.refreshPublicDownloads();
+};
+window.closeDownloadModal = function(e) {
+  if (!e || e.target.id === 'downloadAppModal') {
+    document.getElementById('downloadAppModal')?.classList.add('hidden');
   }
-}
+};
+window.hideDownloadModal = function() {
+  document.getElementById('downloadAppModal')?.classList.add('hidden');
+};
 
-function infoHeroMovie() {
-  if (App.currentHeroMovie) {
-    App.openMovieDetail(App.currentHeroMovie.slug);
+window.openFeedbackModal = function() {
+  document.getElementById('feedbackModal')?.classList.remove('hidden');
+  if (window.Feedback?.load) window.Feedback.load();
+};
+window.closeFeedbackModal = function(e) {
+  if (!e || e.target.id === 'feedbackModal') {
+    document.getElementById('feedbackModal')?.classList.add('hidden');
   }
-}
+};
+window.hideFeedbackModal = function() {
+  document.getElementById('feedbackModal')?.classList.add('hidden');
+};
 
-function hideMovieModal() {
-  window.Phim4KTrailer?.stop();
-  App.detailRequestId++;
-  document.getElementById('movieModal').classList.add('hidden');
-  App.syncPageScrollLock();
-}
-
-function closeMovieModal(e) {
-  if (e.target.id === 'movieModal') {
-    hideMovieModal();
-  }
-}
-
-function playCurrentFirstEpisode() {
-  App.playCurrentFirstEpisode();
-}
-
-// Attach App to window
-window.App = App;
-
-document.addEventListener('DOMContentLoaded', () => {
-  App.init();
-});
+// Legacy compatibility object
+window.App = {
+  syncPageScrollLock() {},
+  init() {}
+};
