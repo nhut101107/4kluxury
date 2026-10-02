@@ -1,0 +1,84 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "com.phim4k.cinema"
+    buildFeatures { buildConfig true }
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.phim4k.cinema"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 61
+        versionName "3.61"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    flavorDimensions += "device"
+    productFlavors {
+        phone {
+            dimension "device"
+            applicationId "com.phim4k.cinema"
+            buildConfigField "String", "PHIM4K_PLATFORM", '"android"'
+        }
+        tv {
+            dimension "device"
+            applicationId "com.phim4k.cinema.tv"
+            buildConfigField "String", "PHIM4K_PLATFORM", '"android_tv"'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // The decoder smoke fixture is available only to debug/instrumentation
+    // builds. It must never add test media to the signed production APK.
+    sourceSets {
+        debug.assets.srcDir(layout.buildDirectory.dir('generated/qaAssets'))
+    }
+}
+
+def prepareDebugQaAssets = tasks.register('prepareDebugQaAssets', Copy) {
+    from(rootProject.file('../public/media/qa-original.mp4'))
+    into(layout.buildDirectory.dir('generated/qaAssets/public/media'))
+}
+
+tasks.matching { it.name in ['mergePhoneDebugAssets', 'mergeTvDebugAssets'] }.configureEach {
+    dependsOn(prepareDebugQaAssets)
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

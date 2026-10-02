@@ -1,0 +1,74 @@
+name: Actions availability probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/actions-probe.yml'
+  workflow_dispatch:
+    inputs:
+      health_url:
+        description: Optional public health endpoint to verify from a hosted runner
+        required: false
+        type: string
+      auth_status_url:
+        description: Optional auth status endpoint without credentials in its URL
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Confirm hosted runner availability
+        run: echo "GitHub Actions runner is available"
+
+      - name: Probe live catalog candidates and artwork
+        shell: bash
+        run: |
+          set -u
+          urls=(
+            'https://ophim1.com/danh-sach/phim-moi-cap-nhat?page=1'
+            'https://ophim1.com/v1/api/danh-sach/phim-moi-cap-nhat?page=1'
+            'https://phimapi.com/danh-sach/phim-moi-cap-nhat?page=1'
+            'https://phimapi.com/v1/api/danh-sach/phim-moi-cap-nhat?page=1'
+            'https://phimapi.com/v1/api/danh-sach/phim-moi-nhat?page=1'
+          )
+          for url in "${urls[@]}"; do
+            body="$(mktemp)"
+            meta="$(curl --silent --show-error --location --max-time 20 --output "$body" --write-out '%{http_code} %{content_type}' --header 'accept: application/json' "$url" || true)"
+            echo "probe url=$url result=$meta"
+            if jq -e . "$body" >/dev/null 2>&1; then
+              count="$(jq -r '(.data.items // .items // []) | length' "$body")"
+              base="$(jq -r '.data.APP_DOMAIN_CDN_IMAGE // .APP_DOMAIN_CDN_IMAGE // empty' "$body")"
+              poster="$(jq -r '.data.items[0].poster_url // .items[0].poster_url // empty' "$body")"
+              echo "json count=$count base=$base poster=$poster"
+              if [ -n "$base" ] && [ -n "$poster" ]; then
+                artwork="${base%/}/${poster#/}"
+                image_meta="$(curl --silent --show-error --location --max-time 20 --output /dev/null --write-out '%{http_code} %{content_type}' --header 'referer: https://phimapi.com/' "$artwork" || true)"
+                echo "artwork host=$(printf '%s' "$artwork" | cut -d/ -f3) result=$image_meta"
+              fi
+            fi
+          done
+
+      - name: Verify public backend health
+        if: ${{ inputs.health_url != '' }}
+        run: curl --fail --show-error --max-time 20 "${{ inputs.health_url }}"
+
+      - name: Verify legacy raw-key authentication fails closed
+        if: ${{ inputs.auth_status_url != '' }}
+        env:
+          AUTH_STATUS_URL: ${{ inputs.auth_status_url }}
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --max-time 20 --output "$response_file" --write-out '%{http_code}' \
+            --header 'x-license-key: P4K-ACTIONS-PROBE' \
+            --header 'x-device-id: github-actions-probe' \
+            "$AUTH_STATUS_URL")"
+          test "$status" = "401"
+          grep -q '"code":"ACCESS_TOKEN_REQUIRED"' "$response_file"

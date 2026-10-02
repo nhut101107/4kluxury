@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="refresh" content="0; url=./index.html">
+  <title>MNHUT Cinema</title>
+</head>
+<body>
+  <p>Đang mở <a id="appLink" href="./index.html">MNHUT Cinema</a>…</p>
+  <script>
+    (function () {
+      const target = new URL('./index.html', window.location.href);
+      target.search = window.location.search;
+      target.hash = window.location.hash;
+      document.getElementById('appLink').href = target.href;
+      window.location.replace(target.href);
+    })();
+  </script>
+</body>
+</html>

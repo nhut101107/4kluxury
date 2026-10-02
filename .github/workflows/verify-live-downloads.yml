@@ -1,0 +1,59 @@
+name: Verify live app downloads
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-live-downloads.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check production app release manifest and update endpoints
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, time, urllib.parse, urllib.request, urllib.error
+          origin='https://phim4k-license-api.phim4k-pwdbhdz.workers.dev'
+          releases={
+              'android':('/download/android',4066505,'cc281e54b0f8ad4dd6056d610f9b0514347332fd414a24e9a80112ae353d198f'),
+              'android_tv':('/download/android-tv',4066505,'d950eff9c40f82405c6a5a20f2eaed034a6027e3d06a03ac4dd805829db6f9ec'),
+              'ios':('/download/ios',4522334,'54c8789f3bce1a77e5ab2e98c1d8ff94517be203cacd44b942de938c0ac16fdd'),
+              'windows':('/download/windows',121050513,'b4a656d240ec1d64b2a8df47ef9b462647a0946f5c5a464228443980f797e34c'),
+          }
+          def get(path):
+            for attempt in range(4):
+              try:
+                with urllib.request.urlopen(urllib.request.Request(origin+path,headers={'Accept':'application/json','User-Agent':'MNHUT-Cinema-Release-QA/3.61'}),timeout=25) as r:
+                  print('HTTP',path,r.status,r.headers.get('content-type'),flush=True)
+                  assert r.status==200,(path,r.status)
+                  return json.load(r)
+              except urllib.error.HTTPError as error:
+                details=error.read(220).decode('utf-8','replace').replace('\n',' ')
+                print('HTTP ERROR',path,error.code,'type=',error.headers.get('content-type'),'server=',error.headers.get('server'),'ray=',error.headers.get('cf-ray'),'body=',details,flush=True)
+                if attempt==3:raise
+                time.sleep(3)
+              except Exception as error:
+                print('FETCH ERROR',path,type(error).__name__,str(error),flush=True)
+                if attempt==3:raise
+                time.sleep(3)
+          manifest=get('/api/app/downloads')
+          for platform,(download_path,size,sha) in releases.items():
+            entry=manifest[platform]
+            url=urllib.parse.urlsplit(entry['url'])
+            assert url.hostname=='phim4k-license-api.phim4k-pwdbhdz.workers.dev',(platform,url.hostname)
+            assert url.path==download_path,(platform,url.path)
+            assert entry['version']=='3.61',platform
+            assert entry['sha256']==sha,platform
+            assert entry['sizeBytes']==size,platform
+            print('PASS live app downloads:',platform,'v3.61 first-party route, size, SHA-256',flush=True)
+            status=get('/api/app/check-update?'+urllib.parse.urlencode({'platform':platform,'version':'3.59'}))
+            assert status['latestVersion']=='3.61',(platform,status)
+            assert status['downloadSha256']==sha,platform
+            assert status['downloadSizeBytes']==size,platform
+            print('PASS live check-update:',platform,flush=True)
+          print('PASS all 4 production release and update endpoints',flush=True)
+          PY

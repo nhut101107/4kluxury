@@ -1,0 +1,8 @@
+name = "4kluxury"
+compatibility_date = "2026-09-04"
+pages_build_output_dir = "public"
+
+[vars]
+PROJECT_NAME = "4kluxury"
+APP_NAME = "4K Luxury Cinema"
+DEFAULT_DOMAIN = "4kluxury.pages.dev"

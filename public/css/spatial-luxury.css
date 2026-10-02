@@ -1,0 +1,633 @@
+/* =====================================================================
+   4K LUXURY CINEMA - SPATIAL LUXURY & VISIONOS AESTHETICS
+   Ultra-Smooth, Futuristic, Haptic-Responsive Design System
+   ===================================================================== */
+
+:root {
+  --lux-void: #030509;
+  --lux-deep: #070b14;
+  --lux-card: rgba(11, 17, 32, 0.85);
+  --lux-glass: rgba(16, 24, 46, 0.72);
+  --lux-glass-hover: rgba(26, 38, 70, 0.88);
+  --lux-glass-card: rgba(13, 20, 38, 0.78);
+  
+  --lux-border: rgba(255, 255, 255, 0.09);
+  --lux-border-bright: rgba(255, 255, 255, 0.22);
+  --lux-border-neon: rgba(0, 242, 254, 0.45);
+  --lux-border-gold: rgba(245, 158, 11, 0.45);
+  
+  --neon-cyan: #00f2fe;
+  --neon-blue: #38bdf8;
+  --neon-gold: #fbbf24;
+  --neon-amber: #f59e0b;
+  --neon-emerald: #10b981;
+  --neon-crimson: #f43f5e;
+  --neon-purple: #a855f7;
+
+  --ambient-glow: #00f2fe;
+  --ambient-glow-soft: rgba(0, 242, 254, 0.16);
+  --ambient-glow-bright: rgba(0, 242, 254, 0.45);
+
+  --font-display: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --spring-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Ambient Background Layer */
+.spatial-ambient-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: 
+    radial-gradient(circle at 50% 20%, rgba(0, 242, 254, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 80% 60%, rgba(168, 85, 247, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 20% 80%, rgba(245, 158, 11, 0.06) 0%, transparent 50%);
+  transition: background 1.2s ease;
+}
+
+/* Top Navbar - Frosted Spatial Glass */
+.navbar {
+  background: rgba(7, 11, 20, 0.82) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border-bottom: 1px solid var(--lux-border) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+  transition: all 0.35s var(--spring-smooth) !important;
+}
+
+.navbar.scrolled {
+  background: rgba(4, 7, 14, 0.94) !important;
+  border-bottom: 1px solid rgba(0, 242, 254, 0.25) !important;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.75), 0 0 20px rgba(0, 242, 254, 0.15) !important;
+}
+
+/* Brand Logo with Glow */
+.brand-logo .logo-gradient {
+  background: linear-gradient(135deg, #ffffff 0%, #00f2fe 50%, #fbbf24 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.5px !important;
+  text-shadow: 0 0 24px rgba(0, 242, 254, 0.4) !important;
+}
+
+.brand-avatar.mnhut-brand-chip {
+  background: linear-gradient(135deg, #00f2fe, #3b82f6) !important;
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.5) !important;
+  color: #030509 !important;
+  font-weight: 900 !important;
+}
+
+.badge-noads {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(245, 158, 11, 0.1)) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25) !important;
+}
+
+/* Navigation Buttons with Liquid Pill Feel */
+.nav-links .nav-btn {
+  position: relative !important;
+  border-radius: 9999px !important;
+  padding: 8px 18px !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+  transition: all 0.25s var(--spring-smooth) !important;
+}
+
+.nav-links .nav-btn:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  transform: translateY(-1px) !important;
+}
+
+.nav-links .nav-btn.active {
+  color: #030509 !important;
+  background: linear-gradient(135deg, #00f2fe, #38bdf8) !important;
+  box-shadow: 0 0 20px rgba(0, 242, 254, 0.55) !important;
+  font-weight: 700 !important;
+}
+
+/* Search Box Spatial Styling */
+.search-box {
+  background: rgba(16, 24, 46, 0.65) !important;
+  border: 1px solid var(--lux-border) !important;
+  border-radius: 9999px !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+  transition: all 0.3s var(--spring-smooth) !important;
+}
+
+.search-box:focus-within {
+  border-color: var(--neon-cyan) !important;
+  background: rgba(20, 30, 58, 0.85) !important;
+  box-shadow: 0 0 22px rgba(0, 242, 254, 0.35), inset 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* 3D Spatial Coverflow Section */
+.coverflow-section {
+  position: relative !important;
+  perspective: 1200px !important;
+  padding: 40px 16px 20px !important;
+  overflow: hidden !important;
+}
+
+.coverflow-track {
+  perspective: 1200px !important;
+  transform-style: preserve-3d !important;
+}
+
+.coverflow-card {
+  position: relative !important;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85) !important;
+  transition: all 0.5s var(--spring-smooth) !important;
+  will-change: transform, opacity, filter !important;
+}
+
+.coverflow-card img {
+  border-radius: 20px !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.coverflow-card.center {
+  border: 1.5px solid rgba(0, 242, 254, 0.45) !important;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9), 0 0 45px rgba(0, 242, 254, 0.35) !important;
+  transform: scale(1.05) translateZ(50px) !important;
+  z-index: 10 !important;
+}
+
+.coverflow-card.left {
+  transform: rotateY(28deg) scale(0.85) translateZ(-30px) !important;
+  opacity: 0.65 !important;
+  filter: brightness(0.7) blur(0.5px) !important;
+}
+
+.coverflow-card.right {
+  transform: rotateY(-28deg) scale(0.85) translateZ(-30px) !important;
+  opacity: 0.65 !important;
+  filter: brightness(0.7) blur(0.5px) !important;
+}
+
+.coverflow-card.center::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  border-radius: 20px !important;
+  background: linear-gradient(180deg, transparent 60%, rgba(3, 5, 9, 0.85) 100%) !important;
+  pointer-events: none !important;
+}
+
+/* Play & Info Buttons in Coverflow */
+.btn-cf-play {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+  color: #030509 !important;
+  font-weight: 800 !important;
+  border-radius: 9999px !important;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.5) !important;
+  transition: all 0.25s var(--spring-smooth) !important;
+}
+
+.btn-cf-play:hover {
+  transform: translateY(-2px) scale(1.03) !important;
+  box-shadow: 0 0 35px rgba(245, 158, 11, 0.7) !important;
+}
+
+.btn-cf-play:active, .btn-cf-play.is-pressing {
+  transform: scale(0.96) !important;
+}
+
+.btn-cf-info {
+  background: rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border-radius: 9999px !important;
+  font-weight: 600 !important;
+  transition: all 0.25s var(--spring-smooth) !important;
+}
+
+.btn-cf-info:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* Movie Cards - Holographic Specular Sheen */
+.movie-card {
+  position: relative !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  background: var(--lux-glass-card) !important;
+  border: 1px solid var(--lux-border) !important;
+  transition: transform 0.35s var(--spring-smooth), box-shadow 0.35s var(--spring-smooth), border-color 0.35s ease !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+  will-change: transform !important;
+}
+
+.movie-card:hover {
+  transform: translateY(-6px) scale(1.025) !important;
+  border-color: rgba(0, 242, 254, 0.45) !important;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 242, 254, 0.25) !important;
+  z-index: 5 !important;
+}
+
+.movie-card:active, .movie-card.is-pressing {
+  transform: scale(0.96) !important;
+  transition-duration: 0.1s !important;
+}
+
+/* Dynamic Specular Sheen on Hover */
+.movie-card::before {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: radial-gradient(circle at var(--sheen-x, 50%) var(--sheen-y, 50%), rgba(255, 255, 255, 0.15) 0%, transparent 65%) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.3s ease !important;
+  z-index: 3 !important;
+}
+
+.movie-card:hover::before {
+  opacity: 1 !important;
+}
+
+/* Movie Badges */
+.card-badge, .badge-quality, .badge-cf-cam {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.25), rgba(56, 189, 248, 0.15)) !important;
+  color: #00f2fe !important;
+  border: 1px solid rgba(0, 242, 254, 0.4) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.4px !important;
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.25) !important;
+}
+
+/* Category Filter Chips */
+.catalog-chip-row button, .search-quick-chips button {
+  border-radius: 9999px !important;
+  background: rgba(16, 24, 46, 0.65) !important;
+  border: 1px solid var(--lux-border) !important;
+  color: rgba(255, 255, 255, 0.78) !important;
+  padding: 8px 18px !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  backdrop-filter: blur(12px) !important;
+  transition: all 0.22s var(--spring-smooth) !important;
+}
+
+.catalog-chip-row button:hover, .search-quick-chips button:hover {
+  background: rgba(28, 42, 78, 0.8) !important;
+  color: #ffffff !important;
+  border-color: rgba(0, 242, 254, 0.4) !important;
+  transform: translateY(-2px) !important;
+}
+
+.catalog-chip-row button.active {
+  background: linear-gradient(135deg, #00f2fe, #38bdf8) !important;
+  color: #030509 !important;
+  border-color: transparent !important;
+  box-shadow: 0 0 18px rgba(0, 242, 254, 0.5) !important;
+  font-weight: 800 !important;
+}
+
+/* VisionOS Bottom Floating Dock */
+.bottom-tab-bar {
+  background: rgba(7, 11, 20, 0.88) !important;
+  backdrop-filter: blur(30px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(200%) !important;
+  border-top: 1px solid var(--lux-border) !important;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.75) !important;
+}
+
+.bottom-tab-bar .tab-item {
+  color: rgba(255, 255, 255, 0.6) !important;
+  transition: all 0.22s var(--spring-smooth) !important;
+}
+
+.bottom-tab-bar .tab-item:active, .bottom-tab-bar .tab-item.is-pressing {
+  transform: scale(0.92) !important;
+}
+
+.bottom-tab-bar .tab-item.active {
+  color: var(--neon-cyan) !important;
+  text-shadow: 0 0 14px rgba(0, 242, 254, 0.6) !important;
+}
+
+.bottom-tab-bar .tab-item.active .tab-indicator {
+  background: var(--neon-cyan) !important;
+  box-shadow: 0 0 12px var(--neon-cyan) !important;
+}
+
+/* =====================================================================
+   SUPER ADMIN PANEL - NEXT-GEN CYBER LUXURY OVERHAUL
+   ===================================================================== */
+#adminModal .admin-dialog {
+  background: linear-gradient(165deg, rgba(8, 14, 28, 0.96) 0%, rgba(3, 6, 12, 0.98) 100%) !important;
+  border: 1px solid rgba(0, 242, 254, 0.35) !important;
+  box-shadow: 0 35px 90px rgba(0, 0, 0, 0.9), 0 0 60px rgba(0, 242, 254, 0.15) !important;
+  backdrop-filter: blur(35px) !important;
+  -webkit-backdrop-filter: blur(35px) !important;
+  border-radius: 28px !important;
+  overflow: hidden !important;
+  animation: adminModalEntrance 0.4s var(--spring-smooth) !important;
+}
+
+@keyframes adminModalEntrance {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Admin Header */
+.admin-header {
+  background: rgba(14, 22, 44, 0.5) !important;
+  border-bottom: 1px solid var(--lux-border) !important;
+  padding: 24px 28px !important;
+  position: relative !important;
+}
+
+.admin-header::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px !important;
+  background: linear-gradient(90deg, transparent, #00f2fe, #fbbf24, transparent) !important;
+}
+
+.admin-badge {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(56, 189, 248, 0.08)) !important;
+  color: #00f2fe !important;
+  border: 1px solid rgba(0, 242, 254, 0.5) !important;
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.35) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.8px !important;
+  border-radius: 9999px !important;
+  padding: 6px 14px !important;
+}
+
+.admin-user-pill {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 9999px !important;
+  padding: 5px 14px !important;
+  font-size: 13px !important;
+}
+
+/* Admin Quick Actions */
+.admin-quick-actions button {
+  border-radius: 9999px !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  padding: 8px 18px !important;
+  transition: all 0.25s var(--spring-smooth) !important;
+}
+
+.admin-quick-actions .btn-primary {
+  background: linear-gradient(135deg, #00f2fe, #3b82f6) !important;
+  box-shadow: 0 0 20px rgba(0, 242, 254, 0.4) !important;
+  color: #030509 !important;
+  border: none !important;
+}
+
+.admin-quick-actions .btn-primary:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 0 28px rgba(0, 242, 254, 0.6) !important;
+}
+
+.admin-quick-actions .btn-maintenance {
+  background: rgba(239, 68, 68, 0.18) !important;
+  border: 1px solid rgba(239, 68, 68, 0.45) !important;
+  color: #f87171 !important;
+}
+
+.admin-quick-actions .btn-maintenance:hover {
+  background: rgba(239, 68, 68, 0.32) !important;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.45) !important;
+}
+
+/* Admin Tabs Navigation */
+.admin-tabs-nav {
+  display: flex !important;
+  gap: 8px !important;
+  padding: 12px 24px !important;
+  background: rgba(6, 10, 20, 0.6) !important;
+  border-bottom: 1px solid var(--lux-border) !important;
+  overflow-x: auto !important;
+}
+
+.admin-tab-btn {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  padding: 10px 20px !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  font-size: 13.5px !important;
+  white-space: nowrap !important;
+  transition: all 0.22s var(--spring-smooth) !important;
+}
+
+.admin-tab-btn:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.admin-tab-btn.active {
+  background: rgba(0, 242, 254, 0.14) !important;
+  border-color: rgba(0, 242, 254, 0.45) !important;
+  color: #00f2fe !important;
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.25) !important;
+  font-weight: 700 !important;
+}
+
+/* Dashboard Quick Stats Grid */
+.admin-stats-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+  gap: 16px !important;
+  padding: 22px 28px !important;
+}
+
+.stat-card {
+  position: relative !important;
+  background: rgba(14, 22, 42, 0.65) !important;
+  border: 1px solid var(--lux-border) !important;
+  border-radius: 18px !important;
+  padding: 20px 18px !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4) !important;
+  overflow: hidden !important;
+  transition: all 0.3s var(--spring-smooth) !important;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px) !important;
+  border-color: rgba(0, 242, 254, 0.4) !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6), 0 0 25px rgba(0, 242, 254, 0.2) !important;
+}
+
+.stat-card .stat-num {
+  font-size: 32px !important;
+  font-weight: 900 !important;
+  line-height: 1.1 !important;
+  letter-spacing: -0.5px !important;
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.stat-card.stat-green .stat-num {
+  background: linear-gradient(135deg, #34d399, #10b981) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: 0 0 20px rgba(16, 185, 129, 0.35) !important;
+}
+
+.stat-card.stat-orange .stat-num {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.stat-card.stat-red .stat-num {
+  background: linear-gradient(135deg, #f87171, #ef4444) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.stat-card.stat-purple .stat-num {
+  background: linear-gradient(135deg, #c084fc, #a855f7) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.stat-card .stat-lbl {
+  margin-top: 8px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.6px !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* Admin Content Box */
+.admin-section-box {
+  background: rgba(12, 18, 36, 0.6) !important;
+  border: 1px solid var(--lux-border) !important;
+  border-radius: 20px !important;
+  padding: 22px 24px !important;
+  margin: 18px 24px !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35) !important;
+}
+
+.admin-section-box h3 {
+  font-size: 17px !important;
+  font-weight: 800 !important;
+  color: #f8fafc !important;
+  letter-spacing: -0.2px !important;
+}
+
+/* High-tech Admin Table */
+.admin-table-wrapper {
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--lux-border) !important;
+  margin-top: 14px !important;
+}
+
+.admin-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  background: rgba(8, 12, 24, 0.65) !important;
+}
+
+.admin-table th {
+  background: rgba(16, 24, 48, 0.8) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.6px !important;
+  padding: 12px 16px !important;
+  border-bottom: 1px solid var(--lux-border) !important;
+}
+
+.admin-table td {
+  padding: 14px 16px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-size: 13.5px !important;
+}
+
+.admin-table tr:hover td {
+  background: rgba(0, 242, 254, 0.04) !important;
+}
+
+/* Cyber Terminal Styling */
+.cyber-terminal {
+  background: #020408 !important;
+  border: 1px solid rgba(0, 242, 254, 0.3) !important;
+  border-radius: 16px !important;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 242, 254, 0.15) !important;
+  overflow: hidden !important;
+  margin-top: 16px !important;
+}
+
+.terminal-header {
+  background: #080e1a !important;
+  border-bottom: 1px solid rgba(0, 242, 254, 0.2) !important;
+  padding: 10px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.terminal-body {
+  padding: 16px 20px !important;
+  font-family: 'JetBrains Mono', Consolas, Monaco, monospace !important;
+  font-size: 12.5px !important;
+  line-height: 1.6 !important;
+  color: #38bdf8 !important;
+  max-height: 380px !important;
+  overflow-y: auto !important;
+}
+
+/* Touch Active Feedback & Haptic Class */
+.is-pressing {
+  transform: scale(0.96) !important;
+  transition: transform 0.08s ease !important;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .admin-dialog {
+    width: 96% !important;
+    max-height: 94vh !important;
+    border-radius: 20px !important;
+  }
+
+  .admin-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    padding: 16px !important;
+    gap: 10px !important;
+  }
+
+  .admin-section-box {
+    margin: 12px 14px !important;
+    padding: 16px !important;
+  }
+}

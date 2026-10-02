@@ -1,0 +1,47 @@
+{
+  "name": "4kluxury-app",
+  "version": "4.0.0",
+  "description": "4K Luxury Cinema with Spatial UI, Audio & Haptics for Cloudflare Pages (4kluxury.pages.dev)",
+  "main": "server.js",
+  "overrides": {
+    "qs": "6.16.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "pages:dev": "wrangler pages dev public",
+    "pages:deploy": "wrangler pages deploy public --project-name 4kluxury",
+    "ios:prepare": "node scripts/prepare-ios-web.js",
+    "ios:sync": "npm run ios:prepare && npx cap sync ios && npm run ios:integrity",
+    "ios:integrity": "node scripts/generate-ios-integrity-manifest.js",
+    "ios:verify": "node scripts/verify-ios-shell.js",
+    "ios:open": "npx cap open ios",
+    "qa:browser": "node scripts/qa-browser-smoke.mjs",
+    "test:player": "node --test test/player-core.test.js test/player-contract.test.js",
+    "test:prepare": "npm run ios:prepare && npx cap copy ios && npm run ios:integrity",
+    "pretest": "npm run test:prepare",
+    "test": "node --test test/*.test.js backend-worker/test/*.test.mjs relay/*.test.mjs",
+    "desktop:build": "npm run ios:prepare && electron-builder --config electron-builder.json --win --x64 --publish never",
+    "desktop:verify": "node scripts/verify-windows-artifact.cjs",
+    "desktop:smoke": "node scripts/run-desktop-smoke.cjs",
+    "security:audit": "node scripts/security-audit.cjs",
+    "android:sync": "npm run ios:prepare && cap sync android",
+    "tv:sync": "npm run android:sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.1",
+    "@capacitor/core": "8.5.1",
+    "@capacitor/ios": "8.5.1",
+    "@capacitor/screen-orientation": "8.0.1",
+    "@capacitor/status-bar": "8.0.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "hls.js": "1.7.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.1",
+    "electron": "44.2.0",
+    "electron-builder": "26.15.3",
+    "terser": "^5.44.0",
+    "wrangler": "4.129.0"
+  }
+}

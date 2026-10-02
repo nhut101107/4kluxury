@@ -1,0 +1,59 @@
+name = "phim4k-license-api"
+main = "src/worker-entry.mjs"
+compatibility_date = "2026-09-04"
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[vars]
+MOVIE_CATALOG_ORIGIN = "https://phimapi.com"
+MOVIE_OPHIM_ORIGIN = "https://ophim1.com"
+MOVIE_BACKUP_CATALOG_ORIGIN = "https://phim.nguonc.com"
+
+# Create the D1 database after logging in, then replace this placeholder with
+# the ID printed by `wrangler d1 create phim4k-license`.
+[[d1_databases]]
+binding = "DB"
+database_name = "phim4k-license"
+database_id = "799655ad-6da5-443c-bf50-ae353b815b01"
+
+# Edge-enforced limits shared across Worker instances.
+[[ratelimits]]
+name = "ACTIVATION_RATE_LIMITER"
+namespace_id = "910010001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[[ratelimits]]
+name = "STATUS_RATE_LIMITER"
+namespace_id = "910010002"
+
+  [ratelimits.simple]
+  limit = 180
+  period = 60
+
+[[ratelimits]]
+name = "ADMIN_RATE_LIMITER"
+namespace_id = "910010003"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
+[[ratelimits]]
+name = "PUBLIC_RATE_LIMITER"
+namespace_id = "910010004"
+
+  [ratelimits.simple]
+  limit = 300
+  period = 60
+
+[[ratelimits]]
+name = "MEDIA_RATE_LIMITER"
+namespace_id = "910010005"
+
+  [ratelimits.simple]
+  limit = 1200
+  period = 60

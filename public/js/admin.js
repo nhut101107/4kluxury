@@ -1,0 +1,1650 @@
+// Admin Panel Controller: Keys, User Ban/Unban, Anti-DDoS, and Live Audit Logs
+
+const Admin = {
+  currentTab: 'keys',
+  logAccountFilter: '',
+  logTypeFilter: 'ALL',
+  logCursor: null,
+  loadedLogs: [],
+  logRefreshTimer: null,
+  userRefreshTimer: null,
+  logLoading: false,
+  logSummary: null,
+
+  async secureFetch(input, init = {}) {
+    const secured = await window.SessionVault?.decorate?.(input, init) || init;
+    return window.fetch(input, secured);
+  },
+
+  formatVietnamTime(value, { seconds = true } = {}) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return 'Không rõ thời gian';
+    return new Intl.DateTimeFormat('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}),
+      hour12: false,
+    }).format(date);
+  },
+
+  async loadAccessPolicy() {
+    const toggle = document.getElementById('adminFreeAccess');
+    const save = document.getElementById('saveAccessPolicy');
+    toggle.disabled = save.disabled = true;
+    try {
+      const res = await API.fetchJson(`/api/app/access-policy?refresh=${Date.now()}`, { cache: 'no-store' });
+      if (typeof res.freeAccess !== 'boolean') throw new Error('Không đọc được trạng thái');
+      toggle.checked = res.freeAccess;
+      this.renderMaintenance(res.maintenance);
+      toggle.disabled = save.disabled = false;
+      document.getElementById('accessPolicyMessage').textContent = res.freeAccess ? 'Đang cho phép truy cập trực tiếp' : 'Đang yêu cầu key · 1 key / 1 máy';
+    } catch (_) { document.getElementById('accessPolicyMessage').textContent = 'Không đọc được trạng thái. Bấm thử lại.'; }
+  },
+
+  async saveAccessPolicy() {
+    const toggle = document.getElementById('adminFreeAccess');
+    const save = document.getElementById('saveAccessPolicy');
+    const message = document.getElementById('accessPolicyMessage');
+    const requestedFreeAccess = toggle.checked;
+    toggle.disabled = save.disabled = true;
+    message.textContent = requestedFreeAccess ? 'Đang bật truy cập trực tiếp…' : 'Đang bật lại yêu cầu key…';
+    try {
+      const response = await this.secureFetch('/api/admin/access-policy', {method:'POST', cache:'no-store', headers:{...this.getAdminHeaders(), 'Content-Type':'application/json'}, body:JSON.stringify({freeAccess:requestedFreeAccess})});
+      const result = await response.json();
+      if (!response.ok || !result.success || result.freeAccess !== requestedFreeAccess) throw new Error('Không lưu được chế độ');
+      toggle.checked = result.freeAccess;
+      message.textContent = result.freeAccess ? 'Đã lưu: người dùng vào ngay, không cần key hoặc Telegram.' : 'Đã lưu: người dùng chỉ cần key, không cần Telegram.';
+    } catch (_) {
+      message.textContent = 'Lưu thất bại. Công tắc đã trở về trạng thái trên máy chủ.';
+      try {
+        const current = await API.fetchJson(`/api/app/access-policy?refresh=${Date.now()}`, { cache: 'no-store' });
+        if (typeof current.freeAccess === 'boolean') toggle.checked = current.freeAccess;
+      } catch (_) {}
+    }
+    finally { toggle.disabled = save.disabled = false; }
+  },
+
+  renderMaintenance(value) {
+    const maintenance = value?.active === true ? value : { active: false };
+    const toggle = document.getElementById('adminMaintenanceToggle');
+    const save = document.getElementById('maintenanceSaveBtn');
+    const state = document.getElementById('maintenanceAdminState');
+    const quick = document.getElementById('adminMaintenanceBtn');
+    const message = document.getElementById('maintenanceMessageInput');
+    if (toggle) { toggle.checked = maintenance.active; toggle.disabled = false; }
+    if (save) save.disabled = false;
+    if (message && maintenance.message) message.value = maintenance.message;
+    if (state) {
+      const until = maintenance.expiresAt
+        ? ` · tự mở ${new Date(maintenance.expiresAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}`
+        : maintenance.active ? ' · tắt thủ công' : '';
+      state.classList.toggle('active', maintenance.active);
+      state.innerHTML = `<i></i> ${maintenance.active ? `Đang bảo trì${until}` : 'Đang hoạt động'}`;
+    }
+    if (quick) {
+      quick.classList.toggle('active', maintenance.active);
+      quick.textContent = maintenance.active ? '🛠 Đang bảo trì · mở quản lý' : '🛠 Bật / tắt bảo trì';
+    }
+  },
+
+  async loadMaintenance() {
+    const state = document.getElementById('maintenanceAdminState');
+    const toggle = document.getElementById('adminMaintenanceToggle');
+    const save = document.getElementById('maintenanceSaveBtn');
+    if (toggle) toggle.disabled = true;
+    if (save) save.disabled = true;
+    if (state) state.innerHTML = '<i></i> Đang đọc…';
+    try {
+      const result = await API.fetchJson(`/api/app/access-policy?refresh=${Date.now()}`, { cache: 'no-store' }, 12000);
+      this.renderMaintenance(result.maintenance);
+      document.getElementById('maintenanceAdminMessage').textContent = 'Đã đồng bộ trạng thái từ máy chủ.';
+    } catch (error) {
+      if (state) state.innerHTML = '<i></i> Không đọc được';
+      document.getElementById('maintenanceAdminMessage').textContent = error.message || 'Không đọc được trạng thái bảo trì.';
+    }
+  },
+
+  async saveMaintenance() {
+    const toggle = document.getElementById('adminMaintenanceToggle');
+    const save = document.getElementById('maintenanceSaveBtn');
+    const status = document.getElementById('maintenanceAdminMessage');
+    const enabled = Boolean(toggle?.checked);
+    const message = document.getElementById('maintenanceMessageInput')?.value.trim() || '';
+    const durationMinutes = Number.parseInt(document.getElementById('maintenanceDurationInput')?.value || '0', 10);
+    if (enabled && !message) {
+      status.textContent = 'Hãy nhập thông báo cho người dùng.';
+      return;
+    }
+    if (enabled && !window.confirm('Bật bảo trì sẽ tạm chặn toàn bộ người xem. Tiếp tục?')) {
+      await this.loadMaintenance();
+      return;
+    }
+    toggle.disabled = save.disabled = true;
+    status.textContent = enabled ? 'Đang đóng phòng chiếu…' : 'Đang mở lại ứng dụng…';
+    try {
+      const response = await this.secureFetch('/api/admin/maintenance', {
+        method: 'POST', cache: 'no-store',
+        headers: { ...this.getAdminHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled, message, durationMinutes }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) throw new Error(result.message || 'Không lưu được chế độ bảo trì.');
+      this.renderMaintenance(result.maintenance);
+      status.textContent = result.message || (enabled ? 'Đã bật bảo trì.' : 'Đã mở lại ứng dụng.');
+    } catch (error) {
+      status.textContent = error.message || 'Không lưu được chế độ bảo trì.';
+      await this.loadMaintenance();
+    } finally {
+      toggle.disabled = save.disabled = false;
+    }
+  },
+
+  async open(tab = 'keys') {
+    if (window.Auth?.activeKeyData?.isAdmin !== true) {
+      if (window.promptAdminLogin) {
+        window.promptAdminLogin();
+      } else {
+        alert('Vui lòng đăng nhập bằng Key Admin.');
+      }
+      return;
+    }
+
+    document.getElementById('adminModal').classList.remove('hidden');
+    void this.loadAccessPolicy();
+    const version = document.getElementById('adminBuildVersion');
+    if (version) version.textContent = `Phiên bản giao diện ${API.getVersion()}`;
+    return this.showTab(tab);
+  },
+
+  showTab(tab) {
+    if (!['keys', 'users', 'downloads', 'content', 'logs'].includes(tab)) return;
+    const result = this.switchTab(tab);
+    const content = document.getElementById(`adminTab${tab.charAt(0).toUpperCase() + tab.slice(1)}`);
+    if (tab === 'logs') content?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    else document.querySelector('.admin-dialog').scrollTop = 0;
+    return result;
+  },
+
+  close() {
+    this.stopLogAutoRefresh();
+    this.stopUserAutoRefresh();
+    document.getElementById('adminModal').classList.add('hidden');
+  },
+
+  switchTab(tab) {
+    this.currentTab = tab;
+    this.stopLogAutoRefresh();
+    this.stopUserAutoRefresh();
+
+    // Tabs navigation buttons
+    ['keys', 'users', 'downloads', 'content', 'logs'].forEach(t => {
+      const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+      const content = document.getElementById(`adminTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+      if (btn) btn.classList.toggle('active', t === tab);
+      if (content) content.classList.toggle('hidden', t !== tab);
+    });
+
+    if (tab === 'keys') {
+      this.loadKeys();
+      this.loadDeviceRequests();
+    }
+    if (tab === 'users') {
+      this.loadUsers();
+    }
+    if (tab === 'downloads') return Promise.all([this.loadDownloadsConfig(), this.loadAccessPolicy()]);
+    if (tab === 'content') return Promise.all([this.loadContentStatus(), this.loadAnnouncementEditor(), this.loadMovieReports(), this.loadFeedbackInbox()]);
+    if (tab === 'logs') {
+      return this.loadLogs();
+    }
+  },
+
+  generateRandomKey() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let p1 = '', p2 = '';
+    for (let i = 0; i < 4; i++) p1 += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < 4; i++) p2 += chars.charAt(Math.floor(Math.random() * chars.length));
+    const generated = `MNHUT-${p1}-${p2}`;
+    document.getElementById('newKeyInput').value = generated;
+  },
+
+  async loadDeviceRequests() {
+    const container = document.getElementById('deviceRequestsList');
+    if (!container) return;
+    container.innerHTML = '<p class="admin-desc">Đang tải yêu cầu thiết bị…</p>';
+    try {
+      const response = await this.secureFetch('/api/admin/device-access-requests', { headers: this.getAdminHeaders() });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || `HTTP ${response.status}`);
+      const requests = Array.isArray(payload.requests) ? payload.requests : [];
+      container.innerHTML = '';
+      if (!requests.length) {
+        container.innerHTML = '<p class="admin-desc">Chưa có yêu cầu nào.</p>';
+        return;
+      }
+      requests.forEach((request) => {
+        const card = document.createElement('div');
+        card.className = `device-request-card status-${request.status || 'pending'}`;
+        const info = document.createElement('div');
+        info.className = 'device-request-info';
+        const key = document.createElement('strong');
+        key.textContent = request.license_key || '-';
+        const device = document.createElement('code');
+        device.textContent = request.device_id || '-';
+        const meta = document.createElement('span');
+        meta.textContent = `${request.plan || 'VIP'} · ${request.status === 'approved' ? 'Đã duyệt' : request.status === 'rejected' ? 'Đã từ chối' : 'Đang chờ'}`;
+        info.append(key, device, meta);
+        card.appendChild(info);
+        if (request.status === 'pending') {
+          const actions = document.createElement('div');
+          actions.className = 'device-request-actions';
+          const approve = document.createElement('button');
+          approve.type = 'button';
+          approve.className = 'btn-action-mini btn-unban';
+          approve.textContent = 'Duyệt máy';
+          approve.onclick = () => this.decideDeviceRequest(request.license_key, request.device_id, 'approve');
+          const reject = document.createElement('button');
+          reject.type = 'button';
+          reject.className = 'btn-action-mini btn-delete';
+          reject.textContent = 'Từ chối';
+          reject.onclick = () => this.decideDeviceRequest(request.license_key, request.device_id, 'reject');
+          actions.append(approve, reject);
+          card.appendChild(actions);
+        }
+        container.appendChild(card);
+      });
+    } catch (error) {
+      container.innerHTML = '';
+      const message = document.createElement('p');
+      message.className = 'gate-message error';
+      message.textContent = `Không tải được yêu cầu thiết bị: ${error.message}`;
+      container.appendChild(message);
+    }
+  },
+
+  async decideDeviceRequest(key, deviceId, decision) {
+    try {
+      const response = await this.secureFetch('/api/admin/device-access-decision', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key, deviceId, decision })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || `HTTP ${response.status}`);
+      await Promise.all([this.loadDeviceRequests(), this.loadKeys()]);
+    } catch (error) {
+      alert(`Không thể xử lý yêu cầu: ${error.message}`);
+    }
+  },
+
+  getAdminHeaders() {
+    const token = window.SessionVault?.current?.()?.accessToken;
+    return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  },
+
+  async loadMovieReports() {
+    const container = document.getElementById('movieReportsList');
+    if (!container) return;
+    container.innerHTML = '<p class="admin-desc">Đang tải hộp thư báo lỗi…</p>';
+    try {
+      const response = await this.secureFetch('/api/admin/reports', { cache: 'no-store', headers: this.getAdminHeaders() });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || data.error || `HTTP ${response.status}`);
+      container.replaceChildren();
+      const closed = new Map((data.closedMovies || []).map((item) => [item.movie_slug, item]));
+      const reports = Array.isArray(data.reports) ? data.reports : [];
+      if (!reports.length && !closed.size) {
+        container.innerHTML = '<p class="admin-desc">Chưa có báo lỗi phim nào.</p>';
+        return;
+      }
+      reports.forEach((report) => {
+        const card = document.createElement('article');
+        card.className = `device-request-card status-${report.status || 'open'}`;
+        const info = document.createElement('div');
+        info.className = 'device-request-info';
+        const title = document.createElement('strong');
+        title.textContent = `${report.movie_name || report.movie_slug}${report.episode ? ` · ${report.episode}` : ''}`;
+        const reason = document.createElement('span');
+        reason.textContent = report.reason || 'Không có mô tả';
+        const meta = document.createElement('small');
+        meta.textContent = `${report.status === 'resolved' ? 'Đã xử lý' : 'Đang chờ'} · ${new Date(report.created_at).toLocaleString('vi-VN')}`;
+        info.append(title, reason, meta);
+        const actions = document.createElement('div');
+        actions.className = 'device-request-actions';
+        const isClosed = closed.has(report.movie_slug);
+        const availability = document.createElement('button');
+        availability.type = 'button';
+        availability.className = `btn-action-mini ${isClosed ? 'btn-unban' : 'btn-delete'}`;
+        availability.textContent = isClosed ? 'Mở phim lại' : 'Đóng phim để sửa';
+        availability.onclick = () => this.setMovieAvailability(report, !isClosed);
+        const resolve = document.createElement('button');
+        resolve.type = 'button';
+        resolve.className = 'btn-action-mini btn-time';
+        resolve.textContent = report.status === 'resolved' ? 'Mở lại báo lỗi' : 'Đã sửa xong';
+        resolve.onclick = () => this.decideMovieReport(report.id, report.status === 'resolved' ? 'open' : 'resolved');
+        actions.append(availability, resolve);
+        card.append(info, actions);
+        container.appendChild(card);
+      });
+      for (const item of closed.values()) {
+        if (reports.some((report) => report.movie_slug === item.movie_slug)) continue;
+        const card = document.createElement('article');
+        card.className = 'device-request-card status-rejected';
+        const info = document.createElement('div');
+        info.className = 'device-request-info';
+        const title = document.createElement('strong');
+        title.textContent = item.movie_name || item.movie_slug;
+        const meta = document.createElement('span');
+        meta.textContent = 'Đang đóng khỏi kho người xem';
+        info.append(title, meta);
+        const reopen = document.createElement('button');
+        reopen.className = 'btn-action-mini btn-unban';
+        reopen.textContent = 'Mở phim lại';
+        reopen.onclick = () => this.setMovieAvailability({ movie_slug: item.movie_slug, movie_name: item.movie_name }, false);
+        card.append(info, reopen);
+        container.appendChild(card);
+      }
+    } catch (error) {
+      container.replaceChildren();
+      const message = document.createElement('p');
+      message.className = 'gate-message error';
+      message.textContent = `Không đọc được hộp thư báo lỗi: ${String(error.message || error)}`;
+      container.appendChild(message);
+    }
+  },
+
+  async decideMovieReport(id, status) {
+    await API.request('/api/admin/report-decision', { method: 'POST', body: JSON.stringify({ id, status }) });
+    await this.loadMovieReports();
+  },
+
+  async loadFeedbackInbox() {
+    const container = document.getElementById('feedbackInboxList');
+    if (!container) return;
+    container.textContent = 'Đang tải góp ý người dùng…';
+    try {
+      const data = await API.request('/api/admin/feedback', { cache: 'no-store' });
+      const tickets = Array.isArray(data.tickets) ? data.tickets : [];
+      container.replaceChildren();
+      if (!tickets.length) {
+        const empty = document.createElement('p');
+        empty.className = 'admin-desc';
+        empty.textContent = 'Chưa có góp ý hoặc báo lỗi chung nào.';
+        container.appendChild(empty);
+        return;
+      }
+      tickets.forEach((ticket) => {
+        const card = document.createElement('article');
+        card.className = `device-request-card feedback-admin-card status-${ticket.status || 'open'}`;
+        const info = document.createElement('div');
+        info.className = 'device-request-info';
+        const title = document.createElement('strong');
+        title.textContent = `${ticket.category === 'issue' ? '🐞 Báo lỗi' : '💡 Góp ý'} · ${ticket.subject}`;
+        const body = document.createElement('span');
+        body.textContent = ticket.message;
+        const meta = document.createElement('small');
+        meta.textContent = `${ticket.device_id || 'Không rõ thiết bị'} · ${this.formatVietnamTime(ticket.created_at)}`;
+        info.append(title, body, meta);
+        if (ticket.admin_reply) {
+          const reply = document.createElement('span');
+          reply.className = 'feedback-admin-existing-reply';
+          reply.textContent = `Đã trả lời: ${ticket.admin_reply}`;
+          info.appendChild(reply);
+        }
+        const actions = document.createElement('div');
+        actions.className = 'device-request-actions';
+        const answer = document.createElement('button');
+        answer.type = 'button';
+        answer.className = 'btn-action-mini btn-time';
+        answer.textContent = ticket.admin_reply ? '✏️ Sửa tin nhắn trả lời User' : '💬 Nhắn tin trả lời User';
+        answer.title = 'Mở ô nhập tin nhắn phản hồi trực tiếp cho người dùng';
+        answer.onclick = () => this.replyFeedback(ticket);
+        actions.appendChild(answer);
+        card.append(info, actions);
+        container.appendChild(card);
+      });
+    } catch (error) {
+      container.textContent = `Không đọc được góp ý: ${error.message}`;
+    }
+  },
+
+  async replyFeedback(ticket) {
+    const reply = prompt(`Trả lời user về “${ticket.subject}”:`, ticket.admin_reply || '');
+    if (reply === null || !reply.trim()) return;
+    const data = await API.request('/api/admin/feedback/reply', {
+      method: 'POST',
+      body: JSON.stringify({ id: ticket.id, reply: reply.trim(), status: 'answered' }),
+    });
+    alert(`✔ ${data.message}`);
+    await this.loadFeedbackInbox();
+  },
+
+  async setMovieAvailability(report, closed) {
+    const movieSlug = report.movie_slug || report.movieSlug;
+    const movieName = report.movie_name || report.movieName || movieSlug;
+    if (closed && !confirm(`Tạm đóng phim [${movieName}] khỏi toàn bộ kho để sửa?`)) return;
+    await API.request('/api/admin/movie-availability', {
+      method: 'POST',
+      body: JSON.stringify({ movieSlug, movieName, closed, reason: report.reason || 'Đang sửa lỗi phát' }),
+    });
+    window.API?.clearMovieCache?.();
+    await this.loadMovieReports();
+  },
+
+  async rotateMasterKey(event) {
+    event.preventDefault();
+    const input = document.getElementById('adminNewMasterKey');
+    const alertEl = document.getElementById('adminMasterKeyAlert');
+    const newKey = String(input?.value || '').trim().toUpperCase();
+
+    if (!/^[A-Z0-9][A-Z0-9-]{4,63}$/.test(newKey)) {
+      alertEl.textContent = 'Key Admin mới phải dài 5–64 ký tự, chỉ gồm A–Z, số hoặc dấu gạch ngang.';
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+      return;
+    }
+    if (!confirm('Đổi key Admin? Key cũ sẽ bị vô hiệu ngay sau khi đổi.')) return;
+
+    try {
+      const res = await this.secureFetch('/api/admin/rotate-master-key', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ newKey })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+
+      input.value = '';
+      await SessionVault.clear();
+      alertEl.textContent = 'Đã đổi key Admin và thu hồi phiên cũ. Hãy đăng nhập lại bằng key mới.';
+      alertEl.className = 'gate-message success';
+      alertEl.classList.remove('hidden');
+      window.setTimeout(() => {
+        this.close();
+        Auth.clearStoredSession();
+        Auth.triggerLock('Key Admin đã đổi. Hãy đăng nhập lại bằng key mới.');
+      }, 700);
+    } catch (error) {
+      alertEl.textContent = `Không thể đổi key: ${error.message}`;
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // ====================================================
+  // 1. KEYS MANAGEMENT
+  // ====================================================
+  async loadKeys() {
+    const tbody = document.getElementById('keysTableBody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">Đang tải danh sách key từ cơ sở dữ liệu...</td></tr>';
+
+    try {
+      const res = await this.secureFetch('/api/admin/keys', {
+        headers: this.getAdminHeaders()
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      this.renderStats(data.stats);
+      this.renderKeysTable(data.keys);
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #f87171; padding: 20px;">Lỗi tải dữ liệu. Xác thực Admin không thành công!</td></tr>';
+    }
+  },
+
+  renderStats(stats = {}) {
+    document.getElementById('statTotalKeys').textContent = stats.totalKeys || 0;
+    document.getElementById('statActiveKeys').textContent = stats.activeKeys || 0;
+    document.getElementById('statBoundDevices').textContent = stats.boundDevices || 0;
+    const banEl = document.getElementById('statBannedUsers');
+    if (banEl) banEl.textContent = stats.bannedUsersCount || 0;
+    const ddosEl = document.getElementById('statDdosBlocked');
+    if (ddosEl) ddosEl.textContent = stats.ddosBlockedCount || 0;
+  },
+
+  renderKeysTable(keys = []) {
+    const tbody = document.getElementById('keysTableBody');
+    tbody.innerHTML = '';
+
+    if (keys.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-dim); padding: 20px;">Chưa có key nào.</td></tr>';
+      return;
+    }
+
+    keys.forEach(k => {
+      const tr = document.createElement('tr');
+
+      let expText = 'Vĩnh viễn';
+      if (k.expiresAt) {
+        const d = new Date(k.expiresAt);
+        expText = `${d.toLocaleDateString('vi-VN')} ${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+      }
+
+      let statusBadge = '<span class="badge-status status-active">Hoạt động</span>';
+      if (!k.active) {
+        statusBadge = '<span class="badge-status status-locked">Đã khóa</span>';
+      } else if (k.isExpired) {
+        statusBadge = '<span class="badge-status status-expired">Hết hạn</span>';
+      }
+
+      const devices = Array.isArray(k.devices) ? k.devices : [];
+      const maxDevices = Math.max(1, Number(k.maxDevices || 1));
+      const deviceCount = Number(k.deviceCount ?? devices.length);
+      let deviceBadge = `<div class="device-capacity"><strong>${deviceCount}/${maxDevices} máy</strong><small>Chưa có thiết bị</small></div>`;
+      if (devices.length) {
+        const chips = devices.slice(0, 6).map((device) => {
+          const id = String(device.deviceId || '');
+          const shortId = id.length > 12 ? `${id.slice(0, 7)}…${id.slice(-4)}` : id;
+          return `<span class="device-chip" title="${id}"><span>${shortId}</span><button type="button" class="device-chip-remove" onclick="Admin.removeDevice('${k.key}','${id}')" title="Gỡ thiết bị này">×</button></span>`;
+        }).join('');
+        deviceBadge = `<div class="device-capacity"><strong>${deviceCount}/${maxDevices} máy</strong><div class="device-chip-list">${chips}</div></div>`;
+      }
+
+      let teleBadge = '<span class="badge-tele-unbound">Chưa kích hoạt</span>';
+      if (k.boundTelegramId) {
+        teleBadge = `<a href="https://t.me/${k.boundTelegramId}" target="_blank" class="badge-tele-bound">✈️ ${k.boundTelegramId}</a>`;
+      }
+
+      const isMasterKey = Boolean(k.isAdmin);
+
+      tr.innerHTML = `
+        <td>
+          <div class="key-cell">
+            <strong class="key-code-text">${k.key}</strong>
+            <button class="btn-copy-mini" onclick="Admin.copyKey('${k.key}')" title="Sao chép key">📋</button>
+            ${isMasterKey ? '<span class="badge-admin-tag">ADMIN MASTER</span>' : ''}
+          </div>
+        </td>
+        <td>${teleBadge}</td>
+        <td>${k.plan || 'VIP'}</td>
+        <td class="${k.isExpired ? 'text-expired' : ''}">${expText}</td>
+        <td>${deviceBadge}</td>
+        <td>${statusBadge}</td>
+        <td>
+          <div class="action-buttons-cell">
+            ${!isMasterKey ? `
+              <button class="btn-action-mini btn-time" onclick="Admin.openEditExpiryModal('${k.key}', '${k.expiresAt || ''}')" title="Chỉnh sửa ngày giờ hết hạn hoặc chuyển VIP vĩnh viễn">🕒 Sửa Hạn</button>
+              <button class="btn-action-mini btn-renew" onclick="Admin.promptRenew('${k.key}')" title="Gia hạn thêm ngày">➕ Hạn</button>
+              <button class="btn-action-mini btn-time" onclick="Admin.promptSetMaxDevices('${k.key}', ${maxDevices}, ${deviceCount})" title="Đặt số thiết bị được phép dùng key">👥 ${maxDevices} máy</button>
+              ${deviceCount > 0 ? `<button class="btn-action-mini btn-reset" onclick="Admin.resetDevice('${k.key}')" title="Gỡ toàn bộ thiết bị khỏi key">🔓 Gỡ Máy</button>` : ''}
+              <button class="btn-action-mini btn-reset-tele" onclick="Admin.promptResetTelegram('${k.key}')" title="Đổi / Gỡ Telegram ID">✈️ Tele</button>
+              <button class="btn-action-mini ${k.active ? 'btn-lock' : 'btn-unlock'}" onclick="Admin.toggleKey('${k.key}')">
+                ${k.active ? '🔒 Khóa' : '✔ Mở'}
+              </button>
+              <button class="btn-action-mini btn-delete" onclick="Admin.deleteKey('${k.key}')" title="Xóa key">🗑</button>
+            ` : '<span style="color: var(--accent-gold); font-size: 11px; font-weight: bold;">👑 Master Admin (@mnhutdznecon)</span>'}
+          </div>
+        </td>
+      `;
+
+      tbody.appendChild(tr);
+    });
+  },
+
+  async handleCreateKey(e) {
+    e.preventDefault();
+    const keyInput = document.getElementById('newKeyInput');
+    const teleInput = document.getElementById('newKeyTelegram');
+    const durationInput = document.getElementById('newKeyDuration');
+    const planInput = document.getElementById('newKeyPlan');
+    const maxDevicesInput = document.getElementById('newKeyMaxDevices');
+    const alertEl = document.getElementById('adminFormAlert');
+
+    const key = keyInput.value.trim();
+    const assignedTelegramId = teleInput ? teleInput.value.trim() : '';
+    const durationDays = parseInt(durationInput.value, 10);
+    const plan = planInput.value.trim();
+    const maxDevices = Math.min(20, Math.max(1, parseInt(maxDevicesInput?.value || '1', 10) || 1));
+
+    if (!key) return;
+
+    try {
+      const res = await this.secureFetch('/api/admin/create-key', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key, plan, durationDays, assignedTelegramId, maxDevices })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi tạo key');
+
+      alertEl.textContent = `✔ ${data.message}`;
+      alertEl.className = 'gate-message success';
+      alertEl.classList.remove('hidden');
+
+      keyInput.value = '';
+      if (teleInput) teleInput.value = '';
+      planInput.value = '';
+      this.loadKeys();
+
+      setTimeout(() => alertEl.classList.add('hidden'), 3000);
+    } catch (err) {
+      alertEl.textContent = `❌ ${err.message}`;
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async promptRenew(key) {
+    const days = prompt(`Nhập số ngày muốn gia hạn thêm cho key [${key}]:`, '30');
+    if (!days) return;
+    const numDays = parseInt(days, 10);
+    if (isNaN(numDays) || numDays <= 0) {
+      alert('Số ngày không hợp lệ!');
+      return;
+    }
+
+    try {
+      const res = await this.secureFetch('/api/admin/renew-key', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key, addDays: numDays })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi gia hạn');
+      alert(`✔ ${data.message}`);
+      this.loadKeys();
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  },
+
+  async resetDevice(key) {
+    if (!confirm(`Gỡ toàn bộ thiết bị khỏi key [${key}]?\nTất cả phiên đang dùng key này sẽ bị đăng xuất.`)) return;
+
+    try {
+      const res = await this.secureFetch('/api/admin/reset-device', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi reset');
+      alert(`✔ ${data.message}`);
+      this.loadKeys();
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  },
+
+  async promptSetMaxDevices(key, current = 1, deviceCount = 0) {
+    const value = prompt(`Key [${key}] hiện có ${deviceCount} thiết bị. Cho phép tối đa bao nhiêu máy? (1–20)`, String(current || 1));
+    if (value === null) return;
+    const maxDevices = parseInt(value, 10);
+    if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 20) {
+      alert('Giới hạn thiết bị phải từ 1 đến 20.');
+      return;
+    }
+    try {
+      const res = await this.secureFetch('/api/admin/set-max-devices', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key, maxDevices })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || data.error || 'Không cập nhật được giới hạn thiết bị');
+      alert(`✔ ${data.message}`);
+      await this.loadKeys();
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  },
+
+  async removeDevice(key, deviceId) {
+    if (!confirm(`Gỡ thiết bị [${deviceId}] khỏi key [${key}]?\nPhiên trên máy đó sẽ bị đăng xuất ngay.`)) return;
+    try {
+      const res = await this.secureFetch('/api/admin/remove-device', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key, deviceId })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || data.error || 'Không gỡ được thiết bị');
+      await Promise.all([this.loadKeys(), this.loadDeviceRequests()]);
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  },
+
+  async promptResetTelegram(key) {
+    const newTele = prompt(`Nhập Telegram ID mới muốn gán cho key [${key}] (Để trống nếu muốn gỡ bỏ):`, '');
+    if (newTele === null) return;
+
+    try {
+      const res = await this.secureFetch('/api/admin/reset-telegram', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key, newTelegramId: newTele.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi cập nhật');
+      alert(`✔ ${data.message}`);
+      this.loadKeys();
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  },
+
+  async toggleKey(key) {
+    try {
+      const res = await this.secureFetch('/api/admin/toggle-key', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi đổi trạng thái');
+      this.loadKeys();
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  },
+
+  async deleteKey(key) {
+    if (!confirm(`CẢNH BÁO: Bạn có chắc chắn muốn xóa vĩnh viễn key [${key}] không?`)) return;
+
+    try {
+      const res = await this.secureFetch('/api/admin/delete-key', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi xóa');
+      alert(`✔ ${data.message}`);
+      this.loadKeys();
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  },
+
+  copyKey(key) {
+    navigator.clipboard.writeText(key).then(() => {
+      alert(`📋 Đã sao chép key [${key}] vào bộ nhớ tạm!`);
+    }).catch(() => {
+      prompt('Mã key của bạn:', key);
+    });
+  },
+
+  // ====================================================
+  // 2. USER MANAGEMENT & BAN/UNBAN
+  // ====================================================
+  async loadUsers() {
+    const tbody = document.getElementById('usersTableBody');
+    if (!tbody.children.length) tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">Đang tải danh sách người dùng...</td></tr>';
+
+    try {
+      const data = await API.request('/api/admin/users', { cache: 'no-store' });
+      this.renderUsersTable(data.users || []);
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #f87171; padding: 20px;">Lỗi tải danh sách người dùng!</td></tr>';
+    }
+  },
+
+  // The replacement account table uses DOM nodes instead of interpolating
+  // account data into inline HTML. This keeps user-controlled values out of
+  // event handlers and makes the stronger ban actions explicit.
+  renderUsersTable(users = []) {
+    const tbody = document.getElementById('usersTableBody');
+    tbody.replaceChildren();
+    if (!users.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 9;
+      cell.textContent = 'Chưa có tài khoản nào được ghi nhận.';
+      cell.style.cssText = 'text-align:center;color:var(--text-dim);padding:20px;';
+      row.appendChild(cell);
+      tbody.appendChild(row);
+      return;
+    }
+
+    const makeCell = (text, code = false) => {
+      const cell = document.createElement('td');
+      const value = document.createElement(code ? 'code' : 'span');
+      value.textContent = text || '—';
+      cell.appendChild(value);
+      return cell;
+    };
+    const makeButton = (label, className, onClick) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `btn-action-mini ${className}`;
+      button.textContent = label;
+      button.addEventListener('click', onClick);
+      return button;
+    };
+
+    users.forEach(user => {
+      const row = document.createElement('tr');
+      const key = String(user.key || '');
+      const deviceId = String(user.boundDeviceId || '');
+      row.appendChild(makeCell(deviceId || 'Chưa gắn thiết bị', true));
+      row.appendChild(makeCell(user.deviceName || 'Chưa nhận diện'));
+      row.appendChild(makeCell(user.lastIp || 'Chưa ghi nhận', true));
+      row.appendChild(makeCell(key || 'Truy cập trực tiếp', true));
+      row.appendChild(makeCell(user.plan || 'VIP'));
+      row.appendChild(makeCell(user.expiresAt ? new Date(user.expiresAt).toLocaleDateString('vi-VN') : 'Vĩnh viễn'));
+      row.appendChild(makeCell(user.telegramId || 'Không sử dụng'));
+
+      const statusCell = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = `badge-status ${user.isBanned ? 'status-banned' : 'status-active'}`;
+      badge.textContent = user.isBanned ? 'Đã bị ban' : (user.status || 'Bình thường');
+      statusCell.appendChild(badge);
+      row.appendChild(statusCell);
+
+      const actionCell = document.createElement('td');
+      const actions = document.createElement('div');
+      actions.className = 'action-buttons-cell';
+      if (user.isBanned) {
+        actions.appendChild(makeButton('Mở ban', 'btn-unban', () => this.unbanUser(key, deviceId)));
+      } else {
+        actions.appendChild(makeButton('Ban user', 'btn-ban', () => this.banUser(key, deviceId)));
+      }
+      if (deviceId) actions.appendChild(makeButton(user.deviceBanned ? 'Mở thiết bị' : 'Ban thiết bị', user.deviceBanned ? 'btn-unban' : 'btn-ban', () => this.setSecurityBan('device', deviceId, !user.deviceBanned)));
+      if (user.lastIp && user.lastIp !== 'unknown') actions.appendChild(makeButton(user.ipBanned ? 'Mở IP' : 'Ban IP', user.ipBanned ? 'btn-unban' : 'btn-ban', () => this.setSecurityBan('ip', user.lastIp, !user.ipBanned)));
+      actions.appendChild(makeButton('Nhật ký', 'btn-time', () => this.viewAccountLogs(deviceId || key)));
+      actionCell.appendChild(actions);
+      row.appendChild(actionCell);
+      tbody.appendChild(row);
+    });
+  },
+
+  async banUser(key, deviceId = '') {
+    const reason = prompt(key ? `Lý do ban user dùng key [${key}]:` : `Lý do ban thiết bị [${deviceId}]:`, 'Vi phạm điều khoản sử dụng');
+    if (reason === null) return;
+    if (!confirm(`Xác nhận ban user này? Key sẽ bị khóa ngay trên thiết bị đang dùng.`)) return;
+    try {
+      const data = await API.request('/api/admin/ban-user', {
+        method: 'POST',
+        body: JSON.stringify({ key, deviceId, reason: reason.trim() })
+      });
+      alert(`✔ ${data.message}`);
+      await Promise.all([this.loadUsers(), this.loadKeys()]);
+    } catch (error) {
+      alert(`❌ ${error.message}`);
+    }
+  },
+
+  async unbanUser(key, deviceId = '') {
+    if (!confirm(`Mở ban cho user dùng key [${key}]?`)) return;
+    try {
+      const data = await API.request('/api/admin/unban-user', {
+        method: 'POST',
+        body: JSON.stringify({ key, deviceId })
+      });
+      alert(`✔ ${data.message}`);
+      await Promise.all([this.loadUsers(), this.loadKeys()]);
+    } catch (error) {
+      alert(`❌ ${error.message}`);
+    }
+  },
+
+  async setSecurityBan(scope, value, banned) {
+    const label = scope === 'ip' ? 'IP mạng' : 'thiết bị';
+    const reason = banned ? prompt(`Lý do khóa ${label} [${value}]:`, 'Vi phạm điều khoản sử dụng') : '';
+    if (banned && reason === null) return;
+    if (!confirm(`${banned ? 'Khóa' : 'Mở khóa'} ${label} này?`)) return;
+    try {
+      const data = await API.request(`/api/admin/${banned ? 'ban-user' : 'unban-user'}`, {
+        method: 'POST',
+        body: JSON.stringify({ scope, deviceId: scope === 'device' ? value : '', ip: scope === 'ip' ? value : '', reason: reason || '' })
+      });
+      alert(`✔ ${data.message}`);
+      await this.loadUsers();
+    } catch (error) {
+      alert(`❌ ${error.message}`);
+    }
+  },
+
+  startUserAutoRefresh() {
+    // Danh sách user chỉ cập nhật khi Admin chủ động bấm Làm mới.
+    // Tự tải lại làm nhảy vị trí đang đọc giống phần nhật ký.
+    this.stopUserAutoRefresh();
+  },
+
+  stopUserAutoRefresh() {
+    if (this.userRefreshTimer) window.clearInterval(this.userRefreshTimer);
+    this.userRefreshTimer = null;
+  },
+
+  viewAccountLogs(telegramId) {
+    this.logAccountFilter = telegramId;
+    const filter = document.getElementById('logAccountFilter');
+    if (filter) filter.value = telegramId;
+    this.switchTab('logs');
+  },
+
+  applyLogFilter() {
+    const filter = document.getElementById('logAccountFilter');
+    this.logAccountFilter = filter ? filter.value.trim() : '';
+    this.logTypeFilter = document.getElementById('logTypeFilter')?.value || 'ALL';
+    this.logCursor = null;
+    this.loadLogs();
+  },
+
+  clearLogFilter() {
+    this.logAccountFilter = '';
+    const filter = document.getElementById('logAccountFilter');
+    if (filter) filter.value = '';
+    const type = document.getElementById('logTypeFilter');
+    if (type) type.value = 'ALL';
+    this.logTypeFilter = 'ALL';
+    this.logCursor = null;
+    this.loadLogs();
+  },
+
+  startLogAutoRefresh() {
+    // Nhật ký chỉ làm mới khi Admin chủ động bấm nút. Tự tải lại làm mất vị
+    // trí đang đọc trên điện thoại và tạo truy vấn thừa mỗi 10 giây.
+    this.stopLogAutoRefresh();
+  },
+
+  stopLogAutoRefresh() {
+    if (this.logRefreshTimer) window.clearInterval(this.logRefreshTimer);
+    this.logRefreshTimer = null;
+  },
+
+  // ====================================================
+  // 3. LIVE AUDIT LOGS (CYBER CONSOLE)
+  // ====================================================
+  async loadLogs({ append = false } = {}) {
+    const container = document.getElementById('terminalLogsBody');
+    if (!container) return;
+    if (this.logLoading) return;
+    this.logLoading = true;
+    const more = document.getElementById('logsLoadMoreBtn');
+    if (more) {
+      more.disabled = true;
+      more.textContent = append ? 'Đang tải dữ liệu thật…' : 'Tải thêm nhật ký';
+    }
+    const previousScrollTop = container.scrollTop;
+    if (!append && !this.loadedLogs.length) container.innerHTML = '<div class="log-line log-dim">Đang tải nhật ký người dùng…</div>';
+    const filter = this.logAccountFilter || document.getElementById('logAccountFilter')?.value.trim() || '';
+    const type = this.logTypeFilter || document.getElementById('logTypeFilter')?.value || 'ALL';
+    const query = new URLSearchParams({ limit: '100', type });
+    if (filter) query.set('identity', filter);
+    if (append && this.logCursor) query.set('before', String(this.logCursor));
+    const liveState = document.getElementById('logLiveState');
+    if (liveState) liveState.textContent = '● ĐANG LÀM MỚI';
+
+    try {
+      const data = await API.request(`/api/admin/logs?${query.toString()}`, { cache: 'no-store' });
+      const incoming = Array.isArray(data.logs) ? data.logs : [];
+      const combined = append ? [...this.loadedLogs, ...incoming] : incoming;
+      this.loadedLogs = [...new Map(combined.map((log) => [String(log.id), log])).values()];
+      this.logCursor = data.nextCursor || null;
+      if (!append || data.summary?.verified === true) this.logSummary = data.summary || null;
+      this.renderLogs(this.loadedLogs, this.logSummary);
+      if (!append) container.scrollTop = previousScrollTop;
+      if (more) more.classList.toggle('hidden', !data.hasMore);
+      if (liveState) liveState.textContent = '● THỦ CÔNG';
+    } catch (err) {
+      if (!append) {
+        container.innerHTML = '';
+        const errorLine = document.createElement('div');
+        errorLine.className = 'log-line log-err';
+        errorLine.textContent = `Không tải được nhật ký: ${err.message}`;
+        container.appendChild(errorLine);
+      }
+      if (liveState) liveState.textContent = '● MẤT KẾT NỐI';
+    } finally {
+      this.logLoading = false;
+      if (more) {
+        more.disabled = false;
+        more.textContent = this.logCursor ? 'Tải thêm nhật ký thật' : 'Đã tải hết nhật ký';
+      }
+    }
+  },
+
+  loadMoreLogs() {
+    if (this.logCursor) return this.loadLogs({ append: true });
+  },
+
+  refreshLogs() {
+    this.logCursor = null;
+    return this.loadLogs();
+  },
+
+  // ====================================================
+  // 4. LIVE MOVIE FEED & POSTER MANAGEMENT
+  // ====================================================
+  async loadContentStatus() {
+    const sourceEl = document.getElementById('contentSourceStatus');
+    const refreshEl = document.getElementById('contentLastRefresh');
+    const cacheEl = document.getElementById('contentCacheStatus');
+    const adsEl = document.getElementById('contentAdsStatus');
+    const providerList = document.getElementById('contentProviderList');
+    if (!sourceEl || !refreshEl || !cacheEl) return;
+
+    sourceEl.textContent = 'Đang kiểm tra…';
+    try {
+      const res = await this.secureFetch('/api/admin/content-status', { headers: this.getAdminHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      sourceEl.textContent = `${data.source || 'Nguồn phim'} · ${data.status === 'READY' ? 'hoạt động' : 'cần kiểm tra'}`;
+      refreshEl.textContent = data.lastSuccessfulRefreshAt
+        ? new Date(data.lastSuccessfulRefreshAt).toLocaleString('vi-VN')
+        : 'Chưa có lượt tải mới';
+      cacheEl.textContent = data.cacheActive
+        ? `Edge cache ${data.cacheTtlSeconds || 0} giây`
+        : 'Không dùng cache';
+      if (adsEl) adsEl.textContent = data.ads?.sdkEmbedded ? 'Có SDK quảng cáo' : 'Không nhúng SDK quảng cáo';
+      if (providerList) {
+        providerList.replaceChildren();
+        (data.providers || []).forEach((provider) => {
+          const card = document.createElement('article');
+          card.className = `content-provider-card status-${String(provider.status || 'unknown').toLowerCase()}`;
+          const copy = document.createElement('div');
+          const title = document.createElement('strong');
+          title.textContent = provider.label || provider.id || 'Nguồn nội dung';
+          const description = document.createElement('span');
+          description.textContent = provider.purpose || '';
+          copy.append(title, description);
+          const badge = document.createElement('b');
+          badge.textContent = ({ READY: 'Sẵn sàng', NEEDS_CONFIGURATION: 'Chưa cấu hình', UNREACHABLE: 'Mất kết nối', EMPTY: 'Trống' })[provider.status] || provider.status || 'Chưa rõ';
+          card.append(copy, badge);
+          providerList.appendChild(card);
+        });
+      }
+    } catch (err) {
+      sourceEl.textContent = 'Không đọc được trạng thái';
+      refreshEl.textContent = '—';
+      cacheEl.textContent = '—';
+      if (adsEl) adsEl.textContent = '—';
+      if (providerList) providerList.replaceChildren();
+    }
+  },
+
+  async refreshMovies() {
+    const button = document.getElementById('adminRefreshMoviesBtn');
+    const alertEl = document.getElementById('adminContentAlert');
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Đang làm mới…';
+    }
+
+    try {
+      const res = await this.secureFetch('/api/admin/refresh-movies', {
+        method: 'POST',
+        headers: this.getAdminHeaders()
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      alertEl.textContent = `✓ ${data.message}`;
+      alertEl.className = 'gate-message success';
+      alertEl.classList.remove('hidden');
+      window.API?.clearMovieCache?.();
+      if (window.App) await App.loadHomeFeed({ silent: true });
+      await this.loadContentStatus();
+    } catch (err) {
+      alertEl.textContent = `✕ ${err.message}`;
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = '🔄 Làm mới ngay';
+      }
+    }
+  },
+
+  setAnnouncementAlert(message, success = true) {
+    const alertEl = document.getElementById('announcementAdminAlert');
+    if (!alertEl) return;
+    alertEl.textContent = message;
+    alertEl.className = `gate-message ${success ? 'success' : 'error'}`;
+    alertEl.classList.remove('hidden');
+  },
+
+  async loadAnnouncementEditor() {
+    const state = document.getElementById('announcementAdminState');
+    if (state) state.textContent = 'Đang kiểm tra…';
+    try {
+      const data = await window.API.getAnnouncement();
+      if (!data.active) {
+        if (state) state.textContent = 'Chưa có thông báo';
+        return;
+      }
+      const title = document.getElementById('announcementTitleInput');
+      const message = document.getElementById('announcementMessageInput');
+      if (title) title.value = data.title || 'Thông báo từ Admin';
+      if (message) message.value = data.message || '';
+      if (state) state.textContent = `Đang ghim đến ${new Date(data.expiresAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}`;
+    } catch (_error) {
+      if (state) state.textContent = 'Không đọc được trạng thái';
+    }
+  },
+
+  async publishAnnouncement() {
+    const button = document.getElementById('announcementPublishBtn');
+    const title = document.getElementById('announcementTitleInput')?.value.trim() || 'Thông báo từ Admin';
+    const message = document.getElementById('announcementMessageInput')?.value.trim() || '';
+    const duration = Number.parseInt(document.getElementById('announcementDurationInput')?.value || '0', 10);
+    const unit = Number.parseInt(document.getElementById('announcementDurationUnit')?.value || '1', 10);
+    const durationMinutes = duration * unit;
+    if (!message) {
+      this.setAnnouncementAlert('Hãy nhập nội dung thông báo.', false);
+      return;
+    }
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 43200) {
+      this.setAnnouncementAlert('Thời lượng phải từ 1 phút đến 30 ngày.', false);
+      return;
+    }
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Đang gửi…';
+    }
+    try {
+      const response = await this.secureFetch('/api/admin/announcement', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ action: 'publish', title, message, durationMinutes })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+      this.setAnnouncementAlert(`✓ ${data.message}`);
+      window.App?.renderAnnouncement?.(data.announcement);
+      await this.loadAnnouncementEditor();
+    } catch (error) {
+      this.setAnnouncementAlert(`Không gửi được: ${error.message}`, false);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = '📣 Gửi và ghim thông báo';
+      }
+    }
+  },
+
+  async clearAnnouncement() {
+    if (!confirm('Gỡ thông báo đang ghim khỏi tất cả thiết bị?')) return;
+    const button = document.getElementById('announcementClearBtn');
+    if (button) button.disabled = true;
+    try {
+      const response = await this.secureFetch('/api/admin/announcement', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ action: 'clear' })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+      this.setAnnouncementAlert(`✓ ${data.message}`);
+      window.App?.renderAnnouncement?.({ active: false });
+      await this.loadAnnouncementEditor();
+    } catch (error) {
+      this.setAnnouncementAlert(`Không gỡ được: ${error.message}`, false);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  },
+
+  renderLogs(logs = [], summary = null) {
+    const container = document.getElementById('terminalLogsBody');
+    container.innerHTML = '';
+
+    if (logs.length === 0) {
+      container.innerHTML = '<div class="log-line log-dim">[System] Nhật ký hệ thống trống.</div>';
+      this.renderLogSummary(summary, logs.length);
+      return;
+    }
+
+    const actionNames = {
+      usage_heartbeat: 'Đang hoạt động', usage_app_visibility: 'Ẩn / mở lại app', usage_network_change: 'Đổi trạng thái mạng', usage_client_error: 'Lỗi giao diện', usage_download_open: 'Mở link tải',
+      usage_app_open: 'Mở ứng dụng', usage_tab_view: 'Chuyển tab', usage_category_view: 'Mở danh mục',
+      usage_filter_applied: 'Dùng bộ lọc', usage_search: 'Tìm kiếm', usage_movie_open: 'Mở phim',
+      usage_episode_open: 'Chọn tập', usage_playback_start: 'Bắt đầu xem', usage_playback_ready: 'Luồng sẵn sàng',
+      usage_playback_stop: 'Dừng xem', usage_playback_complete: 'Xem hết tập', usage_playback_error: 'Lỗi phát', usage_server_change: 'Đổi server',
+      license_activated: 'Kích hoạt key', device_access_requested: 'Yêu cầu duyệt thiết bị',
+      device_access_approved: 'Duyệt thiết bị', device_access_rejected: 'Từ chối thiết bị',
+      user_banned: 'Ban người dùng', user_unbanned: 'Mở ban người dùng'
+    };
+    const contextLabels = {
+      movie: 'Phim', episode: 'Tập', tab: 'Tab', category: 'Danh mục', genre: 'Thể loại',
+      country: 'Quốc gia', query: 'Từ khóa', results: 'Kết quả', server: 'Server', quality: 'Chất lượng',
+      seconds: 'Vị trí', duration: 'Thời lượng', watched: 'Đã xem', error: 'Lỗi', entry: 'Cách vào', version: 'Phiên bản',
+      session: 'Phiên', runtime: 'Nền tảng', screen: 'Màn hình', language: 'Ngôn ngữ', network: 'Mạng',
+      viewport: 'Vùng hiển thị', visibility: 'Hiển thị', uptime: 'Thời gian mở (giây)', buffered: 'Đệm (giây)', readyState: 'Trạng thái video', device: 'Thiết bị (đã che)', deviceId: 'Mã thiết bị đầy đủ', os: 'Hệ điều hành', browser: 'Trình duyệt',
+      deviceName: 'Tên thiết bị', ip: 'IP mạng'
+    };
+
+    logs.forEach(l => {
+      const line = document.createElement('div');
+      line.className = 'log-line';
+
+      const timestamp = l.timestamp || l.createdAt || l.created_at;
+      const time = this.formatVietnamTime(timestamp);
+      
+      let typeClass = 'log-tag-info';
+      if (l.type === 'ADMIN') typeClass = 'log-tag-admin';
+      if (l.type === 'BAN') typeClass = 'log-tag-ban';
+      if (l.type === 'DDOS') typeClass = 'log-tag-ddos';
+      if (l.type === 'AUTH') typeClass = 'log-tag-auth';
+      if (l.type === 'USER') typeClass = 'log-tag-user';
+      if (l.type === 'SECURITY') typeClass = 'log-tag-ddos';
+
+      const header = document.createElement('div');
+      header.className = 'log-card-header';
+      const append = (parent, className, value) => {
+        const span = document.createElement('span');
+        span.className = className;
+        span.textContent = value;
+        parent.appendChild(span);
+      };
+      append(header, 'log-time', time);
+      append(header, `log-tag ${typeClass}`, l.type || 'INFO');
+      append(header, 'log-action', actionNames[l.action] || l.action || 'Sự kiện');
+      line.appendChild(header);
+      const context = l.context && typeof l.context === 'object' ? l.context : {};
+      const details = document.createElement('div');
+      details.className = 'log-detail-grid';
+      Object.entries(context).forEach(([key, value]) => {
+        const item = document.createElement('span');
+        const label = document.createElement('b');
+        label.textContent = contextLabels[key] || key;
+        const content = document.createElement('em');
+        content.textContent = String(value);
+        item.append(label, content);
+        details.appendChild(item);
+      });
+      if (!details.children.length) append(details, 'log-text', l.details || 'Không có chi tiết');
+      line.appendChild(details);
+      const identity = document.createElement('div');
+      identity.className = 'log-identity-row';
+      if (l.account?.telegramId) append(identity, 'log-account', `Telegram ${l.account.telegramId}`);
+      if (l.account?.deviceHash) append(identity, 'log-account', `Thiết bị ${l.account.deviceHash}`);
+      if (identity.children.length) line.appendChild(identity);
+
+      container.appendChild(line);
+    });
+
+    this.renderLogSummary(summary, logs.length);
+  },
+
+  renderLogSummary(summary, loadedCount = 0) {
+    const set = (id, value) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    };
+    set('logLoadedCount', String(loadedCount));
+    if (!summary?.verified) {
+      ['logViewerCount', 'logUserCount', 'logErrorCount', 'logSessionCount', 'logWatchTime', 'logLatestMovie', 'logLastSeen']
+        .forEach((id) => set(id, '—'));
+      this.renderViewerAnalytics(null);
+      return;
+    }
+    set('logViewerCount', Number(summary.viewerEvents || 0).toLocaleString('vi-VN'));
+    set('logUserCount', Number(summary.userCount || 0).toLocaleString('vi-VN'));
+    set('logErrorCount', Number(summary.errorCount || 0).toLocaleString('vi-VN'));
+    set('logSessionCount', Number(summary.sessionCount || 0).toLocaleString('vi-VN'));
+    const watchedSeconds = Number(summary.watchedSeconds || 0);
+    set('logWatchTime', watchedSeconds >= 3600
+      ? `${(watchedSeconds / 3600).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} giờ`
+      : `${Math.round(watchedSeconds / 60)} phút`);
+    set('logLatestMovie', summary.latestMovie || '—');
+    set('logLastSeen', summary.lastSeen ? this.formatVietnamTime(summary.lastSeen, { seconds: false }) : '—');
+    this.renderViewerAnalytics(summary.analytics || null);
+  },
+
+  renderViewerAnalytics(analytics) {
+    const daily = document.getElementById('dailyViewerChart');
+    const movies = document.getElementById('movieViewerChart');
+    if (!daily || !movies) return;
+    const empty = '<div class="viewer-chart-empty">Chưa đủ lượt xem thật để vẽ biểu đồ.</div>';
+    const days = Array.isArray(analytics?.byDay) ? analytics.byDay : [];
+    const titles = Array.isArray(analytics?.byMovie) ? analytics.byMovie : [];
+    daily.replaceChildren();
+    movies.replaceChildren();
+    if (!days.length) daily.innerHTML = empty;
+    else {
+      const peak = Math.max(1, ...days.map(item => Number(item.viewers) || 0));
+      days.forEach(item => {
+        const date = new Date(`${item.day}T00:00:00+07:00`);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'bar-chart-item';
+        wrapper.title = `${Number(item.viewers || 0)} người xem · ${Math.round(Number(item.watchedSeconds || 0) / 60)} phút`;
+        const value = document.createElement('b');
+        value.textContent = Number(item.viewers || 0).toLocaleString('vi-VN');
+        const bar = document.createElement('div');
+        bar.className = 'bar-chart-column';
+        bar.style.height = `${Math.max(3, Math.round((Number(item.viewers || 0) / peak) * 100))}%`;
+        const label = document.createElement('small');
+        label.textContent = Number.isNaN(date.getTime()) ? item.day : date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+        wrapper.append(value, bar, label);
+        daily.appendChild(wrapper);
+      });
+      setText('dailyViewerPeak', `Đỉnh ${peak.toLocaleString('vi-VN')} người`);
+    }
+    if (!titles.length) movies.innerHTML = empty;
+    else {
+      const maxWatch = Math.max(1, ...titles.map(item => Number(item.watchedSeconds) || 0));
+      titles.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.className = 'ranked-bar-row';
+        const label = document.createElement('span');
+        label.className = 'ranked-bar-label';
+        label.textContent = `${index + 1}. ${item.movie || 'Không rõ tên'}`;
+        label.title = item.movie || '';
+        const track = document.createElement('div');
+        track.className = 'ranked-bar-track';
+        const fill = document.createElement('div');
+        fill.className = 'ranked-bar-fill';
+        fill.style.width = `${Math.max(2, Math.round((Number(item.watchedSeconds || 0) / maxWatch) * 100))}%`;
+        track.appendChild(fill);
+        const value = document.createElement('span');
+        value.className = 'ranked-bar-value';
+        value.textContent = `${Math.round(Number(item.watchedSeconds || 0) / 60)} phút`;
+        row.append(label, track, value);
+        movies.appendChild(row);
+      });
+      const total = titles.reduce((sum, item) => sum + Number(item.watchedSeconds || 0), 0);
+      setText('movieWatchTotal', `${Math.round(total / 60).toLocaleString('vi-VN')} phút top phim`);
+    }
+    function setText(id, value) { const element = document.getElementById(id); if (element) element.textContent = value; }
+  },
+
+  async clearLogs() {
+    if (!confirm('Bạn có chắc chắn muốn xóa sạch toàn bộ nhật ký hệ thống không?')) return;
+
+    try {
+      const data = await API.request('/api/admin/logs', {
+        method: 'DELETE',
+      });
+      alert(`✔ ${data.message}`);
+      this.loadLogs();
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  },
+
+  // ====================================================
+  // 5. EDIT KEY EXPIRY MODAL METHODS
+  // ====================================================
+  editingKey: null,
+  currentExpiry: null,
+
+  openEditExpiryModal(key, currentExpiry) {
+    this.editingKey = key;
+    this.currentExpiry = currentExpiry;
+
+    document.getElementById('editExpiryKeyTitle').textContent = key;
+    const infoText = document.getElementById('editExpiryCurrentText');
+    const dateInput = document.getElementById('editExpiryDatetimeInput');
+    const alertEl = document.getElementById('editExpiryAlert');
+
+    alertEl.classList.add('hidden');
+
+    if (currentExpiry) {
+      const d = new Date(currentExpiry);
+      infoText.textContent = `${d.toLocaleDateString('vi-VN')} ${d.toLocaleTimeString('vi-VN')}`;
+      
+      // Format to YYYY-MM-DDTHH:MM for datetime-local
+      const pad = n => n < 10 ? '0' + n : n;
+      const localIso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      dateInput.value = localIso;
+    } else {
+      infoText.textContent = 'Vĩnh Viễn (Không Thời Hạn)';
+      dateInput.value = '';
+    }
+
+    document.getElementById('editKeyExpiryModal').classList.remove('hidden');
+  },
+
+  async setExpiryQuickDays(days) {
+    if (!this.editingKey) return;
+    const alertEl = document.getElementById('editExpiryAlert');
+
+    try {
+      const res = await this.secureFetch('/api/admin/set-key-expiry', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key: this.editingKey, addDays: days })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi cập nhật');
+
+      alertEl.textContent = `✔ ${data.message}`;
+      alertEl.className = 'gate-message success';
+      alertEl.classList.remove('hidden');
+
+      this.loadKeys();
+      setTimeout(() => hideEditExpiryModal(), 1200);
+    } catch (err) {
+      alertEl.textContent = `❌ ${err.message}`;
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async setExpiryLifetime() {
+    if (!this.editingKey) return;
+    const alertEl = document.getElementById('editExpiryAlert');
+
+    try {
+      const res = await this.secureFetch('/api/admin/set-key-expiry', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key: this.editingKey, isLifetime: true })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi cập nhật');
+
+      alertEl.textContent = `✔ ${data.message}`;
+      alertEl.className = 'gate-message success';
+      alertEl.classList.remove('hidden');
+
+      this.loadKeys();
+      setTimeout(() => hideEditExpiryModal(), 1200);
+    } catch (err) {
+      alertEl.textContent = `❌ ${err.message}`;
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async submitEditExpiry() {
+    if (!this.editingKey) return;
+    const dateInput = document.getElementById('editExpiryDatetimeInput');
+    const alertEl = document.getElementById('editExpiryAlert');
+
+    if (!dateInput.value) {
+      alertEl.textContent = 'Vui lòng chọn ngày giờ hết hạn!';
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const res = await this.secureFetch('/api/admin/set-key-expiry', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ key: this.editingKey, expiresAt: dateInput.value })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi cập nhật');
+
+      alertEl.textContent = `✔ ${data.message}`;
+      alertEl.className = 'gate-message success';
+      alertEl.classList.remove('hidden');
+
+      this.loadKeys();
+      setTimeout(() => hideEditExpiryModal(), 1200);
+    } catch (err) {
+      alertEl.textContent = `❌ ${err.message}`;
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // ====================================================
+  // 6. APP DOWNLOADS LINKS MANAGEMENT
+  // ====================================================
+  async loadDownloadsConfig() {
+    try {
+      const res = await fetch('/api/app/downloads');
+      const data = await res.json();
+
+      for (const [platform, id] of [['android', 'Apk'], ['ios', 'Ipa'], ['windows', 'Exe'], ['android_tv', 'Tv']]) {
+        const entry = Phim4KPlatform.release(data, platform);
+        const input = document.getElementById('adminDownload' + id + 'Input');
+        const version = document.getElementById('adminVersion' + id + 'Input');
+        const sha256 = document.getElementById('adminSha256' + id + 'Input');
+        const size = document.getElementById('adminSize' + id + 'Input');
+        if (input) { input.value = entry.url; input.required = false; }
+        if (version) { version.value = entry.version; version.required = false; }
+        if (sha256) sha256.value = entry.sha256 || '';
+        if (size) size.value = entry.sizeBytes || '';
+      }
+
+      // Populate Force Update section
+      if (data.forceUpdate) {
+        const toggle = document.getElementById('adminForceUpdateToggle');
+        const statusText = document.getElementById('adminForceUpdateStatusText');
+        const minVer = document.getElementById('adminMinVersionInput');
+        const latestVer = document.getElementById('adminLatestVersionInput');
+        const msgInput = document.getElementById('adminForceUpdateMessage');
+
+        if (toggle) toggle.checked = !!data.forceUpdate.enabled;
+        if (statusText) {
+          statusText.textContent = data.forceUpdate.enabled ? 'ĐANG BẬT (ĐÃ CHẶN)' : 'ĐANG TẮT';
+          statusText.style.color = data.forceUpdate.enabled ? '#10b981' : '#f87171';
+        }
+        if (minVer) minVer.value = data.forceUpdate.minVersion || '3.0.0';
+        if (latestVer) latestVer.value = data.forceUpdate.latestVersion || '3.0.0';
+        if (msgInput) msgInput.value = data.forceUpdate.message || 'Phiên bản của bạn đã cũ, vui lòng cập nhật lên bản mới nhất!';
+      }
+    } catch (err) {
+      console.error('Error loading downloads config:', err);
+    }
+  },
+
+  toggleForceUpdateStatusText() {
+    const toggle = document.getElementById('adminForceUpdateToggle');
+    const statusText = document.getElementById('adminForceUpdateStatusText');
+    if (!toggle || !statusText) return;
+    statusText.textContent = toggle.checked ? 'ĐANG BẬT (ĐÃ CHẶN)' : 'ĐANG TẮT';
+    statusText.style.color = toggle.checked ? '#10b981' : '#f87171';
+  },
+
+  async handleSetForceUpdate(e) {
+    e.preventDefault();
+    const alertEl = document.getElementById('adminForceUpdateAlert');
+
+    const enabled = document.getElementById('adminForceUpdateToggle').checked;
+    const minVersion = document.getElementById('adminMinVersionInput').value.trim();
+    const latestVersion = document.getElementById('adminLatestVersionInput').value.trim();
+    const message = document.getElementById('adminForceUpdateMessage').value.trim();
+
+    try {
+      const res = await this.secureFetch('/api/admin/set-force-update', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({ enabled, minVersion, latestVersion, message })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi cập nhật');
+
+      alertEl.textContent = `✔ ${data.message}`;
+      alertEl.className = 'gate-message success';
+      alertEl.classList.remove('hidden');
+
+      this.toggleForceUpdateStatusText();
+
+      setTimeout(() => {
+        alertEl.classList.add('hidden');
+      }, 4000);
+    } catch (err) {
+      alertEl.textContent = `❌ ${err.message}`;
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleUpdateDownloads(e) {
+    e.preventDefault();
+    const alertEl = document.getElementById('adminDownloadsAlert');
+
+    const androidUrl = document.getElementById('adminDownloadApkInput').value.trim();
+    const androidVersion = document.getElementById('adminVersionApkInput').value.trim();
+
+    const iosUrl = document.getElementById('adminDownloadIpaInput').value.trim();
+    const iosVersion = document.getElementById('adminVersionIpaInput').value.trim();
+
+    const windowsUrl = document.getElementById('adminDownloadExeInput').value.trim();
+    const windowsVersion = document.getElementById('adminVersionExeInput').value.trim();
+
+    try {
+      const tvUrl = document.getElementById('adminDownloadTvInput').value.trim();
+      const isDrive = (value) => {
+        if (!value) return true;
+        try { return ['drive.google.com', 'drive.usercontent.google.com'].includes(new URL(value).hostname.toLowerCase()); }
+        catch (_error) { return false; }
+      };
+      if (![androidUrl, iosUrl, windowsUrl, tvUrl].every(isDrive)) {
+        throw new Error('Tất cả link tải phải là link Google Drive công khai.');
+      }
+      const res = await this.secureFetch('/api/admin/update-downloads', {
+        method: 'POST',
+        headers: this.getAdminHeaders(),
+        body: JSON.stringify({
+          androidUrl, androidVersion,
+          androidSha256: document.getElementById('adminSha256ApkInput').value.trim(),
+          androidSizeBytes: Number(document.getElementById('adminSizeApkInput').value || 0),
+          iosUrl, iosVersion,
+          iosSha256: document.getElementById('adminSha256IpaInput').value.trim(),
+          iosSizeBytes: Number(document.getElementById('adminSizeIpaInput').value || 0),
+          windowsUrl, windowsVersion,
+          windowsSha256: document.getElementById('adminSha256ExeInput').value.trim(),
+          windowsSizeBytes: Number(document.getElementById('adminSizeExeInput').value || 0),
+          android_tvUrl: tvUrl,
+          android_tvVersion: document.getElementById('adminVersionTvInput').value.trim(),
+          android_tvSha256: document.getElementById('adminSha256TvInput').value.trim(),
+          android_tvSizeBytes: Number(document.getElementById('adminSizeTvInput').value || 0)
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi cập nhật');
+
+      alertEl.textContent = `✔ ${data.message}`;
+      alertEl.className = 'gate-message success';
+      alertEl.classList.remove('hidden');
+
+      // Refresh public modal links
+      if (window.refreshPublicDownloads) {
+        window.refreshPublicDownloads();
+      }
+
+      setTimeout(() => {
+        alertEl.classList.add('hidden');
+      }, 4000);
+    } catch (err) {
+      alertEl.textContent = `❌ ${err.message}`;
+      alertEl.className = 'gate-message error';
+      alertEl.classList.remove('hidden');
+    }
+  }
+};
+
+function hideAdminModal() { Admin.close(); }
+function closeAdminModal(e) {
+  if (e.target.id === 'adminModal') {
+    hideAdminModal();
+  }
+}
+
+function hideEditExpiryModal() {
+  document.getElementById('editKeyExpiryModal').classList.add('hidden');
+}
+function closeEditExpiryModal(e) {
+  if (e.target.id === 'editKeyExpiryModal') {
+    hideEditExpiryModal();
+  }
+}
+
+window.Admin = Admin;

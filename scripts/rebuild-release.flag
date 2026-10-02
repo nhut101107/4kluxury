@@ -1,0 +1,30 @@
+2026-09-28 MNHUT rebuild #5: retry all clients with clean native release bundle
+2026-09-28 MNHUT rebuild #6: restore stable EnsMovie browser playback and refresh all clients
+2026-09-28 MNHUT rebuild #7: publish false-stall fix and stabilize packaged Windows verification
+2026-09-28 MNHUT rebuild #8: validate packaged Windows video surface without headless codec timing
+2026-09-28 MNHUT rebuild #9: sync stable web playback to every client and rotate admin credentials
+2026-09-28 MNHUT rebuild #10: verify packaged Windows provider surface without runner codec dependency
+2026-09-28 MNHUT rebuild #11: align Windows smoke with direct-entry app state and preserve diagnostics
+2026-09-28 MNHUT rebuild #12: verify the packaged Windows close control with its real selector
+2026-09-28 MNHUT rebuild #13: align Android device smoke with the direct-entry app state
+2026-09-28 MNHUT rebuild #14: remove stale iOS document scroll locks across web and apps
+2026-09-28 MNHUT rebuild #15: stabilize Android phone device test on the supported API 31 image
+2026-09-28 MNHUT rebuild #16: keep every player action visible in phone landscape mode
+2026-09-28 MNHUT rebuild #17: sync protected desktop playback, real admin actions and low-lag rails to all clients
+2026-09-29 MNHUT rebuild #18: restore stable ENS embed playback and live movie details on all clients
+2026-09-29 MNHUT rebuild #19: remove VSMOV, publish ENSMovie-only playback and repair broken artwork on all clients
+2026-09-30 MNHUT rebuild #20: release 3.57 with deterministic iOS player chrome auto-hide
+
+2026-09-30 MNHUT rebuild #21: release 3.58 safe-area, fill mode, low-latency chrome, ENSMovie watch time and real client IP
+2026-09-30 MNHUT rebuild #22: release 3.59 stable ENSMovie settings row without viewport or chrome resize jank
+2026-09-30 MNHUT rebuild #23: keep ENSMovie iframe stable when fill is tapped before iPhone reaches landscape
+
+2026-09-30 MNHUT rebuild #24: center ENSMovie portrait 16:9 stage; release 3.60 for web, iOS, Android, TV and Windows
+2026-09-30 MNHUT rebuild #25: reject dead metadata-only cards, retry ENSMovie detail without edge cache, and release 3.61 on every client
+2026-10-02 MNHUT rebuild #30: personalized home, Android TV native voice search, and verified viewer analytics on every client
+2026-10-02 MNHUT rebuild #31: remove the playback provider name from every user-facing MNHUT surface
+2026-09-30 MNHUT rebuild #26: expose ENSMovie native ad skip on web, iOS, Android, TV and Windows
+2026-10-01 MNHUT rebuild #27: fix ENSMovie full-viewport geometry on PC, iPhone, Android, TV and Windows
+2026-10-02 MNHUT rebuild #28: ship MNHUT Projection UI and server-verified admin logs on every client
+2026-10-02 MNHUT rebuild #29: include the medium-laptop navigation hotfix in every installer
+2026-10-02 MNHUT rebuild #32: remove the hero ticker bar from web, iOS, Android, TV and Windows

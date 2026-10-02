@@ -1,0 +1,31 @@
+{
+  "appId": "com.phim4k.cinema.desktop",
+  "productName": "MNHUT Cinema",
+  "extraMetadata": { "main": "desktop/main.cjs", "version": "3.61.0", "dependencies": {} },
+  "directories": { "output": "builds/windows-3.61" },
+  "compression": "normal",
+  "files": [
+    "desktop/**",
+    { "from": "dist-ios", "to": "public", "filter": ["**/*"] },
+    { "from": "public/media", "to": "public/media", "filter": ["qa-seek.mp4"] },
+    "package.json"
+  ],
+  "asar": true,
+  "electronFuses": {
+    "runAsNode": false,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "enableNodeCliInspectArguments": false,
+    "enableEmbeddedAsarIntegrityValidation": true,
+    "onlyLoadAppFromAsar": true
+  },
+  "win": { "icon": "desktop/icon.ico", "target": [{ "target": "nsis", "arch": ["x64"] }], "artifactName": "4K-Cinema-Windows-3.61-x64.exe" },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "MNHUT Cinema",
+    "deleteAppDataOnUninstall": false
+  }
+}
