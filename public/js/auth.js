@@ -854,27 +854,47 @@ async function refreshPublicDownloads() {
   try { await downloadRequest; } finally { downloadRequest = null; }
 }
 
-window.refreshPublicDownloads = refreshPublicDownloads;
+let downloadReturnFocus = null;
 
 function openDownloadModal() {
-  if (document.getElementById('downloadAppModal').classList.contains('hidden')) downloadReturnFocus = document.activeElement;
-  document.getElementById('downloadAppModal').classList.remove('hidden');
-  document.querySelector('.download-dialog').scrollTop = 0;
-  document.querySelector('#downloadAppModal .modal-close-btn').focus({ preventScroll: true });
-  return refreshPublicDownloads();
+  const modal = document.getElementById('downloadAppModal');
+  if (!modal) return;
+  if (modal.classList.contains('hidden')) {
+    try { downloadReturnFocus = document.activeElement; } catch (_) {}
+  }
+  modal.classList.remove('hidden');
+  modal.style.setProperty('display', 'flex', 'important');
+  modal.style.setProperty('visibility', 'visible', 'important');
+  modal.style.setProperty('opacity', '1', 'important');
+  modal.style.setProperty('pointer-events', 'auto', 'important');
+  const dialog = document.querySelector('.download-dialog');
+  if (dialog) dialog.scrollTop = 0;
+  try { document.querySelector('#downloadAppModal .modal-close-btn')?.focus?.({ preventScroll: true }); } catch (_) {}
+  if (typeof refreshPublicDownloads === 'function') refreshPublicDownloads();
 }
 
 function hideDownloadModal() {
-  document.getElementById('downloadAppModal').classList.add('hidden');
-  downloadReturnFocus?.focus?.({ preventScroll: true });
+  const modal = document.getElementById('downloadAppModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.style.setProperty('display', 'none', 'important');
+    modal.style.setProperty('visibility', 'hidden', 'important');
+    modal.style.setProperty('opacity', '0', 'important');
+    modal.style.setProperty('pointer-events', 'none', 'important');
+  }
+  try { downloadReturnFocus?.focus?.({ preventScroll: true }); } catch (_) {}
   downloadReturnFocus = null;
 }
 
 function closeDownloadModal(e) {
-  if (e.target.id === 'downloadAppModal') {
+  if (!e || e.target.id === 'downloadAppModal' || e.target.closest?.('.modal-close-btn') || e.target.closest?.('.btn-close-modal')) {
     hideDownloadModal();
   }
 }
+
+window.openDownloadModal = openDownloadModal;
+window.hideDownloadModal = hideDownloadModal;
+window.closeDownloadModal = closeDownloadModal;
 
 // ==========================================
 // FORCE UPDATE & CLIENT UPDATE CHECK HELPERS

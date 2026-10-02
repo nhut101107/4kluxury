@@ -1960,30 +1960,70 @@ window.openAdminPanel = async function() {
 };
 
 window.openDownloadModal = function() {
-  document.getElementById('downloadAppModal')?.classList.remove('hidden');
-  if (window.refreshPublicDownloads) window.refreshPublicDownloads();
+  const modal = document.getElementById('downloadAppModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('pointer-events', 'auto', 'important');
+  }
+  if (typeof window.refreshPublicDownloads === 'function') window.refreshPublicDownloads();
 };
+
 window.closeDownloadModal = function(e) {
-  if (!e || e.target.id === 'downloadAppModal') {
-    document.getElementById('downloadAppModal')?.classList.add('hidden');
+  if (!e || e.target.id === 'downloadAppModal' || e.target.closest?.('.modal-close-btn') || e.target.closest?.('.btn-close-modal')) {
+    window.hideDownloadModal();
   }
 };
+
 window.hideDownloadModal = function() {
-  document.getElementById('downloadAppModal')?.classList.add('hidden');
+  const modal = document.getElementById('downloadAppModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.style.setProperty('display', 'none', 'important');
+    modal.style.setProperty('visibility', 'hidden', 'important');
+    modal.style.setProperty('opacity', '0', 'important');
+    modal.style.setProperty('pointer-events', 'none', 'important');
+  }
 };
 
 window.openFeedbackModal = function() {
-  document.getElementById('feedbackModal')?.classList.remove('hidden');
+  const modal = document.getElementById('feedbackModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.style.setProperty('display', 'flex', 'important');
+  }
   if (window.Feedback?.load) window.Feedback.load();
 };
+
 window.closeFeedbackModal = function(e) {
-  if (!e || e.target.id === 'feedbackModal') {
-    document.getElementById('feedbackModal')?.classList.add('hidden');
+  if (!e || e.target.id === 'feedbackModal' || e.target.closest?.('.modal-close-btn')) {
+    window.hideFeedbackModal();
   }
 };
+
 window.hideFeedbackModal = function() {
-  document.getElementById('feedbackModal')?.classList.add('hidden');
+  const modal = document.getElementById('feedbackModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.style.setProperty('display', 'none', 'important');
+  }
 };
+
+// Global escape key listener to close any open modal
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    window.hideDownloadModal?.();
+    window.hideFeedbackModal?.();
+    if (typeof hideAdminModal === 'function') hideAdminModal();
+    if (typeof hideEditExpiryModal === 'function') hideEditExpiryModal();
+    document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(modal => {
+      modal.classList.add('hidden');
+      modal.style.setProperty('display', 'none', 'important');
+    });
+  }
+});
 
 // Legacy compatibility object
 window.App = {

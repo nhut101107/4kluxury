@@ -631,3 +631,19 @@
     padding: 16px !important;
   }
 }
+
+/* Global Hidden Rule Override */
+.hidden,
+[hidden],
+.modal-overlay.hidden,
+#downloadAppModal.hidden,
+#adminModal.hidden,
+#feedbackModal.hidden,
+#editKeyExpiryModal.hidden,
+#forceUpdateModal.hidden,
+#activationGate.hidden {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

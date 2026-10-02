@@ -46,6 +46,22 @@
   --ease-fast: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Critical Utility: Hidden & Modal Overlays */
+.hidden,
+[hidden],
+.modal-overlay.hidden,
+#downloadAppModal.hidden,
+#adminModal.hidden,
+#feedbackModal.hidden,
+#editKeyExpiryModal.hidden,
+#forceUpdateModal.hidden,
+#activationGate.hidden {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* Base Reset */
 *, *::before, *::after {
   margin: 0;

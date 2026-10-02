@@ -1,4 +1,3 @@
-<!-- Mirrored for web-index compatibility -->
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -314,6 +313,7 @@
 
           <!-- 4. HOLOGRAPHIC SERVER PICKER & TACTILE EPISODES REEL -->
           <div class="theater-addons-hub">
+            <!-- Server Selector Bar -->
             <div class="server-deck-strip">
               <div class="deck-title"><i data-lucide="server"></i> <span>NGUỒN PHÁT (CDN SERVER):</span></div>
               <div class="server-nodes-list" id="server-chips-list">
@@ -335,6 +335,7 @@
               </div>
             </div>
 
+            <!-- Episode Selector Hub -->
             <div class="episodes-reel-container">
               <div class="episodes-reel-header">
                 <div class="reel-title-meta">
@@ -347,6 +348,7 @@
                 </div>
               </div>
 
+              <!-- Tactile Episode Button Grid -->
               <div class="episodes-tactile-grid" id="episodes-buttons-grid">
                 <!-- Rendered dynamically by JS -->
               </div>
@@ -368,6 +370,7 @@
               <span class="panel-counter" id="filter-result-count">Hiển thị toàn bộ kho phim</span>
             </div>
 
+            <!-- Segment 1: Thể loại (Tactile Pills) -->
             <div class="filter-segment-row">
               <span class="segment-label">Thể Loại:</span>
               <div class="segment-pills-bar" id="filter-genre-pills">
@@ -381,6 +384,7 @@
               </div>
             </div>
 
+            <!-- Segment 2: Quốc gia (Tactile Pills) -->
             <div class="filter-segment-row">
               <span class="segment-label">Quốc Gia:</span>
               <div class="segment-pills-bar" id="filter-country-pills">
@@ -392,6 +396,7 @@
               </div>
             </div>
 
+            <!-- Segment 3: Định dạng & Năm -->
             <div class="filter-segment-row">
               <span class="segment-label">Định Dạng:</span>
               <div class="segment-pills-bar" id="filter-format-pills">
@@ -444,10 +449,11 @@
         </div>
       </section>
 
-      <!-- 8. BẢNG XẾP HẠNG & CỘNG ĐỒNG THẢO LUẬN -->
+      <!-- 8. BẢNG XẾP HẠNG & CỘNG ĐỒNG THẢO LUẬN (SPLIT COLUMNS) -->
       <section class="spatial-split-section" id="ranking-section">
         <div class="theater-container grid-two-columns">
           
+          <!-- Cột Trái: Bảng Xếp Hạng Top 5 -->
           <div class="spatial-card-box ranking-column">
             <div class="box-head">
               <div class="head-title">
@@ -466,6 +472,7 @@
             </div>
           </div>
 
+          <!-- Cột Phải: Thảo Luận & Đánh Giá Phim Thời Gian Thực -->
           <div class="spatial-card-box comments-column" id="comments-column">
             <div class="box-head">
               <div class="head-title">
@@ -475,6 +482,7 @@
               <span class="safety-rule-tag"><i data-lucide="shield-check"></i> Không spoil phim</span>
             </div>
 
+            <!-- Comment Input Form -->
             <div class="spatial-comment-compose">
               <textarea id="comment-textarea" placeholder="Chia sẻ cảm nhận của bạn về chất lượng phim, âm thanh, diễn xuất..."></textarea>
               <div class="compose-bottom-bar">
@@ -488,6 +496,7 @@
               </div>
             </div>
 
+            <!-- Comments Feed -->
             <div class="spatial-comments-feed" id="comments-feed">
               <!-- Rendered by JS -->
             </div>
@@ -539,7 +548,7 @@
       </div>
     </div>
 
-    <!-- Toast Hub -->
+    <!-- Toast Notification Hub -->
     <div class="spatial-toast-hub" id="toast-hub"></div>
 
     <!-- 11. MOBILE BOTTOM SPATIAL NAV DOCK -->
@@ -702,6 +711,7 @@
           </div>
         </div>
 
+        <!-- Create New Key Form -->
         <div class="admin-section-box">
           <h3>➕ Tạo License Key Mới (Định dạng tự do hoàn toàn)</h3>
           <form id="createKeyForm" onsubmit="Admin.handleCreateKey(event)" class="create-key-form">
@@ -759,6 +769,7 @@
           <div id="adminMasterKeyAlert" class="gate-message hidden"></div>
         </div>
 
+        <!-- Keys Management Table -->
         <div class="admin-section-box">
           <div class="table-header-row">
             <h3>📋 Danh Sách License Key Trong Hệ Thống</h3>
@@ -950,6 +961,7 @@
             <div><span id="logLastSeen">—</span><small>Hoạt động gần nhất</small></div>
           </div>
           
+          <!-- Terminal / Cyber Log Console -->
           <div class="cyber-terminal" id="terminalLogsContainer">
             <div class="terminal-header">
               <span class="terminal-dot red"></span>
@@ -1140,7 +1152,9 @@
     </div>
   </div>
 
-  <!-- MODAL: EDIT KEY EXPIRATION -->
+  <!-- ================================================= -->
+  <!-- MODAL: EDIT KEY EXPIRATION                        -->
+  <!-- ================================================= -->
   <div id="editKeyExpiryModal" class="modal-overlay hidden" onclick="closeEditExpiryModal(event)">
     <div class="modal-dialog edit-expiry-dialog" onclick="event.stopPropagation()">
       <button class="modal-close-btn" onclick="hideEditExpiryModal()">✕</button>
@@ -1186,7 +1200,9 @@
     </div>
   </div>
 
-  <!-- MODAL: DOWNLOAD LATEST APP VERSION -->
+  <!-- ================================================= -->
+  <!-- MODAL: DOWNLOAD LATEST APP VERSION                -->
+  <!-- ================================================= -->
   <div id="downloadAppModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="downloadTitle" onclick="closeDownloadModal(event)">
     <div class="modal-dialog download-dialog" onclick="event.stopPropagation()">
       <button type="button" class="modal-close-btn" aria-label="Đóng cửa sổ tải ứng dụng" onclick="hideDownloadModal()">✕</button>
@@ -1207,6 +1223,7 @@
       </div>
 
       <div class="download-cards-grid">
+        <!-- Card 1: Android -->
         <div class="download-card">
           <div class="card-os-icon">🤖</div>
           <h3>Android (ADR / APK)</h3>
@@ -1217,6 +1234,7 @@
           </a>
         </div>
 
+        <!-- Card 2: iOS -->
         <div class="download-card">
           <div class="card-os-icon">🍏</div>
           <h3>iPhone / iPad (File IPA)</h3>
@@ -1227,6 +1245,7 @@
           </a>
         </div>
 
+        <!-- Card 3: Windows -->
         <div class="download-card">
           <div class="card-os-icon">💻</div>
           <h3>Máy Tính Windows (EXE)</h3>
@@ -1237,6 +1256,7 @@
           </a>
         </div>
 
+        <!-- Card 4: Android TV -->
         <div class="download-card">
           <div class="card-os-icon">📺</div>
           <h3>Android TV / Google TV</h3>
@@ -1245,10 +1265,17 @@
           <a id="btnDownloadTv" class="btn-download-action btn-apk" aria-disabled="true">Chưa phát hành</a>
         </div>
       </div>
+
+      <!-- Bottom Close Button -->
+      <div style="margin-top: 24px; text-align: center;">
+        <button type="button" class="btn-frosted-glass btn-close-modal" onclick="hideDownloadModal()" style="padding: 10px 32px; border-radius: 9999px; cursor: pointer; font-size: 14px; font-weight: 600; color: #fff; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">✕ Đóng Cửa Sổ</button>
+      </div>
     </div>
   </div>
 
-  <!-- MODAL: USER FEEDBACK & ISSUE REPORT -->
+  <!-- ================================================= -->
+  <!-- MODAL: USER FEEDBACK & ISSUE REPORT               -->
+  <!-- ================================================= -->
   <div id="feedbackModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle" onclick="closeFeedbackModal(event)">
     <div class="modal-dialog feedback-dialog" onclick="event.stopPropagation()">
       <button class="modal-close-btn" type="button" aria-label="Đóng góp ý" onclick="hideFeedbackModal()">✕</button>
@@ -1271,9 +1298,12 @@
     </div>
   </div>
 
+  <!-- Feedback FAB Button -->
   <button id="feedbackFab" class="feedback-fab" type="button" onclick="openFeedbackModal()" aria-label="Góp ý hoặc báo lỗi">💬 Góp ý</button>
 
-  <!-- JAVASCRIPT ARCHITECTURE -->
+  <!-- ================================================= -->
+  <!-- JAVASCRIPT ARCHITECTURE                           -->
+  <!-- ================================================= -->
   <script src="/js/mobile-config.js"></script>
   <script src="/js/session-vault.js"></script>
   <script src="/js/runtime-config.js"></script>
